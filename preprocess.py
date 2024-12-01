@@ -1,215 +1,149 @@
-import tensorflow as tf
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-keras = tf.keras
-layers = keras.layers
-Tokenizer = keras.preprocessing.text.Tokenizer
+import re
+import zeyrek
+import difflib
 
+pip install zeyrek
 
-df = pd.read_csv("datasets/labeled_data.csv", header=0)
+# Zeyrek analizörü oluştur
+analyzer = zeyrek.MorphAnalyzer()
 
-df = df.drop(df.columns[:5], axis=1)
+# Veri setini oku
+input_file = "turkce_raw_2cols.csv"  # Girdi dosyasının adı
+output_file = "turkce_42k_new.csv"  # Çıktı dosyasının adı
+stop_words_file = "turkce_stop_words.txt"  # Stop-words dosyasının adı
 
-print(df.head())
+# Veri setini yükle
+df = pd.read_csv(input_file)
 
-feature_columns = ['hate_speech','offensive_language','ok']
+# Sadece ilk 1000 satırı al
+df = df.iloc[:50]
 
-dfc = df.copy()
+# Stop-words listesini yükle
+with open(stop_words_file, "r", encoding="utf-8") as f:
+    stop_words = set(word.strip() for word in f.readlines())  # Her bir kelimeyi temizleyip sete ekle
 
-df_hate_speech = dfc[dfc['class']==0]
-df_offensive = dfc[dfc['class']==1]
-df_ok = dfc[dfc['class']==2]
+# Text temizleme fonksiyonu
+def clean_text(text):
+    # 1. @ ve # işaretinden sonraki boşluğa kadar olan kısmı kaldır
+    text = re.sub(r"[@#]\S+", "", text)
+    # 2. Linkleri kaldır (http ve www ile başlayanlar)
+    text = re.sub(r"http\S+|www\S+", "", text)
+    # 2. Noktalama işaretlerini kaldır
+    text = re.sub(r"[^\w\s]", "", text)
+    # 3. Tüm harfleri küçük harfe dönüştür
+    text = text.lower()
+    # 4. Sadece kelimeler arasında boşluk bırak
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
-print("There are",len(df_hate_speech), "hate speech records.","and ",len(df_offensive),"offensive records","and",len(df_ok),"are ok")
+# Kelime normalizasyonu (uzatmaları kaldırma) fonksiyonu
+def normalize_repeated_characters(text):
+    """
+    Tekrarlayan harfleri normalleştirir.
+    Örneğin, 'çoook' -> 'çok', 'çççokk' -> 'çok'
+    """
+    # Harf tekrarlarını azalt (örneğin: "çoook" -> "çok")
+    text = re.sub(r'(.)\1{2,}', r'\1', text)  # Aynı harfin 3 veya daha fazla tekrarını 1'e indir
+    # İki kez tekrar eden harfleri tek bir harfe indir
+    text = re.sub(r'(.)\1', r'\1', text)
+    return text
 
-df_ok.head(20)
+# Stop-words kaldırma fonksiyonu
+def remove_stop_words(text):
+    """
+    Stop-words listesindeki kelimeleri metinden kaldırır.
+    """
+    words = text.split()  # Metni kelimelere böl
+    filtered_words = [word for word in words if word not in stop_words]  # Stop-words olmayanları seç
+    return " ".join(filtered_words)  # Kelimeleri birleştir
 
-print("ratio to hate speech:offensive records:ok are ",len(df_hate_speech)/1430,":",len(df_offensive)/1430,":",len(df_ok)/1430)
+# Tek harfli kelimeleri kaldırma fonksiyonu
+def remove_single_characters(text):
+    words = text.split()  # Metni kelimelere böl
+    filtered_words = [word for word in words if len(word) > 1]  # Uzunluğu 1'den büyük olanları seç
+    return " ".join(filtered_words)  # Kelimeleri birleştir
 
+# Zeyrek ile kelimeleri köklerine ayırma fonksiyonu
+def extract_roots(text, analyzer):
+    """
+    Zeyrek ile bir cümlenin köklerine ayrılması.
+    Analiz edilemeyen kelimeler olduğu gibi bırakılır.
+    """
+    if pd.isnull(text):
+        return text
 
-df_offensive = df_offensive[5000:14595]
-len(df_offensive)
+    words = text.split()
+    root_words = []
 
-df_offensive.head()
+    for word in words:
+        # Zeyrek ile analiz yap
+        analyses = analyzer.analyze(word)
+        if analyses:
+            # İlk analiz sonucunun kökünü al
+            root = analyses[0][0].lemma
+            # Eğer root "Unk" ise orijinal kelimeyi kullan
+            if root == "Unk":
+                root_words.append(word)
+            else:
+                root_words.append(root)
+        else:
+            # Analiz edilemeyen kelimeyi olduğu gibi bırak
+            root_words.append(word)
 
-# merge dataframes
-dfc = pd.concat([df_hate_speech,df_offensive,df_ok], axis=0)
+    return " ".join(root_words)
 
-# shuffle the dataframe
-dfc = dfc.sample(frac=1, random_state=42).reset_index(drop=True)
-dfc.head()
+def replace_words(text):
+    # Doğrudan eşleştirme yapılacak kelimeler
+    corrections = {
+        'arab': r'\barap\b',
+        'gævur': r'\bgavur\b',
+        'sokim': r'\bsokayım\b',
+        'mına': r'\bamına\b',
+        'türki': r'\btürkiye\b',
+        'salağı': r'\bsalak\b',
+        'kadı': r'\bkadın\b',
+    }
+    
+    # Regex ile eşleştirme yapılacak yapılar
+    regex_patterns = {
+        'lan': r'\bul?[a]*n?\b',  # "lan", "laan", "ula", "la", vb.
+        'amk': r'\bam[aqk]*\b'    # "amk", "amq", "aq", "am", vb.
+    }
+    
+    # Doğrudan eşleştirme düzeltmeleri
+    for replacement, pattern in corrections.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Regex temelli eşleştirme düzeltmeleri
+    for replacement, pattern in regex_patterns.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    return text
 
-dfc.shape
+#Türkçe karakterleri İngilizce eşdeğerlerine çevirme fonksiyonu
+def convert_turkish_characters(text):
+    turkish_to_english = str.maketrans("çğıöşüâÇĞİÖŞÜÂ", "cgiosuaCGIOSUA")
+    return text.translate(turkish_to_english)
 
-df = dfc.copy()
-num_of_rows = len(df.index)
-p80 = round(num_of_rows * 0.8)
-p99 = round(num_of_rows * 0.99)
+def full_cleaning_pipeline(text):
+        text = clean_text(text)  # Metni temizleme
+        text = normalize_repeated_characters(text)  # Tekrarlanan karakterleri normalleştirme
+        text = remove_stop_words(text)  # Stop kelimeleri kaldırma
+        text = remove_single_characters(text)  # Tek harfli kelimeleri kaldırma
+        text = extract_roots(text, analyzer)  # Kök ayırma işlemi
+        text = replace_words(text)
+        text = convert_turkish_characters(text)  # Türkçe karakter dönüşümü
+        return text
+    
+def preprocess_text(df, analyzer, contextName = 'text'): 
+    # 'text' sütununda tüm işlemleri uygulama
+    df[contextName] = df[contextName].apply(full_cleaning_pipeline)
+    return df
 
-train_features = df[0:p80]
-eval_features = df[p80:p99]
-test_features = df[p99:]
+df = preprocess_text(df, analyzer)
 
-train_labels = train_features.pop('class')
-eval_labels = eval_features.pop('class')
-test_labels = test_features.pop('class')
-print(train_features.shape)
-print(eval_features.shape)
-print(test_features.shape)
+# İşlenmiş veri setini kaydet
+df.to_csv(output_file, index=False)
 
-train_labels.head()
-
-# encoding words
-padding_type = 'pre'
-max_len = 60
-trun_type='post'
-oov_token = '<oov>'
-
-tokenizer = Tokenizer(oov_token=oov_token)
-tokenizer.fit_on_texts(train_features['tweet'])
-
-vocab_size = len(tokenizer.word_index) + 1 # add 1 more, otherwise there will be a out ouf bound index error
-vocab_size
-# tokenizer.word_index
-
-# convert panda dataframe of labels to numpy array
-train_labels = np.array(train_labels)
-eval_labels = np.array(eval_labels)
-test_labels = np.array(test_labels)
-
-# convert each label to array of categorical values
-train_labels = keras.utils.to_categorical(train_labels,3)
-eval_labels = keras.utils.to_categorical(eval_labels,3)
-test_labels = keras.utils.to_categorical(test_labels,3)
-
-train_features_seq = tokenizer.texts_to_sequences(train_features['tweet'])
-eval_features_seq = tokenizer.texts_to_sequences(eval_features['tweet'])
-
-train_features_seq = keras.utils.pad_sequences(train_features_seq,max_len,padding=padding_type)
-eval_features_seq = keras.utils.pad_sequences(eval_features_seq,max_len,padding=padding_type)
-len(train_features_seq[0])
-
-train_features_seq = np.array(train_features_seq)
-eval_features_seq = np.array(eval_features_seq)
-eval_features_seq.shape
-
-num_of_classes = len(feature_columns)
-
-# neural network 01
-model1 = keras.Sequential([
-    keras.layers.Embedding(vocab_size,32,input_length=max_len),
-    keras.layers.GlobalAveragePooling1D(),
-    keras.layers.Dense(24, activation='relu'),
-    keras.layers.Dense(num_of_classes, activation='softmax')
-])
-
-# neural network 02
-model2 = keras.Sequential([
-    keras.layers.Embedding(vocab_size,32,input_length=max_len),
-    keras.layers.Bidirectional(keras.layers.LSTM(32)),
-    keras.layers.Dense(num_of_classes, activation='softmax')
-])
-
-model1.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-model2.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-
-print(model1.summary())
-epochs = 200
-
-early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=10)
-history = model1.fit(train_features_seq,train_labels,epochs=epochs,verbose=2,callbacks=[early_stopping])
-
-print(history.history['accuracy'][-1])
-
-plt.plot(history.history['loss'])
-plt.xLabel='epoch'
-plt.yLabel='loss'
-plt.title('model 1 loss against epochs')
-plt.show()
-plt.savefig('model1_loss.png')
-
-plt.plot(history.history['accuracy'])
-plt.xLabel='epoch'
-plt.yLabel='accuracy'
-plt.title('model 1 accuracy against epochs')
-plt.show()
-plt.savefig('images/model1_accuracy.png')
-
-loss1,acc1 = model1.evaluate(eval_features_seq,eval_labels)
-model1.save('images/2fm-average-pooling.h5')
-
-
-epochs = 200
-
-early_stopping = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=10)
-model2_history = model2.fit(train_features_seq,train_labels,epochs=epochs,verbose=2,callbacks=[early_stopping])
-
-plt.plot(model2_history.history['loss'])
-plt.xLabel='epoch'
-plt.yLabel='loss'
-plt.title('model 2 loss against epochs')
-plt.show()
-
-plt.plot(model2_history.history['accuracy'])
-plt.xLabel='epoch'
-plt.yLabel='accuracy'
-plt.title('model 2 accuracy against epochs')
-plt.show()
-
-loss2,acc2 = model2.evaluate(eval_features_seq,eval_labels)
-
-
-
-# reset the index of test_features and labels
-test_features = test_features.reset_index(drop=True)
-test_features.head()
-
-model2.save('2fm-LSTM.h5')
-
-model = keras.models.load_model('2fm-LSTM.h5')
-
-def manual_test(index):
-  encoded = tokenizer.texts_to_sequences([test_features.loc[index]['tweet']])
-  encoded = keras.utils.pad_sequences(encoded,60,padding='pre',truncating='post')
-  preds = model.predict(encoded)
-  pred = preds[-1]
-  classification = feature_columns[np.argmax(pred)]
-  confidence = np.max(pred) *100
-  print("tweet is",test_features.loc[index]['tweet'],"\nprediction/classification is",classification,".confidence",confidence,"%")
-
-index = input("pick a index below 152: ")
-manual_test(int(index))
-
-import json
-
-with open('toxic_comment_detection_word_index.json', 'w') as file:
-    json.dump(tokenizer.word_index, file)
-
-# Open the file containing the word index
-with open('toxic_comment_detection_word_index.json', 'r') as file:
-    data = json.load(file)
-
-# Convert the JSON data to a dictionary
-word_index = dict(data)
-
-
-feature_columns = ['hate_speech','offensive_language','ok']
-
-my_tweet = "I don't agree with you. I think your ideas dumb"
-
-oov_token = '<oov>'
-
-tokenizer = Tokenizer(oov_token=oov_token)
-tokenizer.word_index = word_index
-encoded = tokenizer.texts_to_sequences([my_tweet])
-encoded = keras.utils.pad_sequences(encoded,60,padding='pre',truncating='post')
-
-pred = model.predict(encoded)
-
-classification = feature_columns[np.argmax(pred[-1])]
-confidence = np.max(pred[-1]) *100
-# if pred doesn't have at least 90% confidence I will consider as ok.
-if confidence < 90:
-  classification = 'ok'
-print("\nprediction/classification is",classification)
+print(f"Veri seti işlenmiş ve '{output_file}' adlı dosyaya kaydedilmiştir.")
