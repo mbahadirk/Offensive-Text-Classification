@@ -3,13 +3,12 @@ import re
 import zeyrek
 import difflib
 
-pip install zeyrek
 
 # Zeyrek analizörü oluştur
 analyzer = zeyrek.MorphAnalyzer()
 
 # Veri setini oku
-input_file = "turkce_raw_2cols.csv"  # Girdi dosyasının adı
+input_file = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv"  # Girdi dosyasının adı
 output_file = "turkce_42k_new.csv"  # Çıktı dosyasının adı
 stop_words_file = "turkce_stop_words.txt"  # Stop-words dosyasının adı
 
@@ -144,6 +143,6 @@ def preprocess_text(df, analyzer, contextName = 'text'):
 df = preprocess_text(df, analyzer)
 
 # İşlenmiş veri setini kaydet
-df.to_csv(output_file, index=False)
+# df.to_csv(output_file, index=False)
 
-print(f"Veri seti işlenmiş ve '{output_file}' adlı dosyaya kaydedilmiştir.")
+# print(f"Veri seti işlenmiş ve '{output_file}' adlı dosyaya kaydedilmiştir.")

@@ -1,0 +1,100 @@
+logistic regression: tüm hiperparametreler:
+class sklearn.linear_model.LogisticRegression(penalty='l2', *, dual=False, tol=0.0001, C=1.0, fit_intercept=True, intercept_scaling=1, class_weight=None, random_state=None, solver='lbfgs', max_iter=100, multi_class='deprecated', verbose=0, warm_start=False, n_jobs=None, l1_ratio=None)
+
+1) solver in [‘newton-cg’, ‘lbfgs’, ‘liblinear’, ‘sag’, ‘saga’]
+Açıklama: Optimizasyon için kullanılacak algoritmayı belirler.
+Değerler:
+
+    'newton-cg': Newton optimizasyonu.
+    'lbfgs': Limited-memory BFGS algoritması.
+    'liblinear': Kütüphane tabanlı optimizasyon.
+    'sag': Ölçeklenebilir algoritma (büyük veri setleri için uygun).
+    'saga': Ölçeklenebilir algoritma, L1 ve elasticnet için 
+uygun.
+
+2) penalty in [‘none’, ‘l1’, ‘l2’, ‘elasticnet’]
+Açıklama: Kullanılacak düzenleme (regularization) türünü belirler.
+Değerler:
+
+    'l1': L1 norm düzenlemesi (lasso regression).
+    'l2': L2 norm düzenlemesi (ridge regression).
+    'elasticnet': L1 ve L2 normlarının karışımı (yalnızca saga solver ile kullanılabilir).
+    'none': Düzenleme yok.
+
+Varsayılan: 'l2'.
+not: hepsi tüm solver'lar tarafından desteklenmez
+
+3)C in [100, 10, 1.0, 0.1, 0.01]
+    Açıklama: Ceza gücünün tersi (inverse of regularization strength). Daha küçük değerler daha güçlü düzenleme uygular.
+    Değer: Pozitif bir float (örneğin, 0.01, 1.0, 10.0).
+    Varsayılan: 1.0.
+
+4) max_iter=100
+    Açıklama: Optimizasyon algoritmasının maksimum yineleme sayısı.
+    Değer: Pozitif bir tamsayı.
+    Varsayılan: 100.
+
+5) tol=0.0001
+Açıklama: Optimizasyon durma kriteri (hata toleransı).
+Değer: Pozitif bir float.
+Varsayılan: 1e-4.
+
+6) class_weight=None
+Açıklama: Sınıflara ağırlık verme stratejisini belirler.
+Değerler:
+
+    'balanced': Sınıf ağırlıkları veri dağılımına göre otomatik ayarlanır.
+    {dict}: Belirli sınıflara özel ağırlıklar atanabilir (örneğin, {0: 1, 1: 2}).
+    None: Ağırlık verilmez.
+
+Varsayılan: None.
+
+7) fit_intercept=True
+Açıklama: Modelin kesme noktası (intercept) öğrenip öğrenmeyeceğini belirler.
+Değer: True (varsayılan) veya False.
+Varsayılan: True.
+
+8) intercept_scaling=1
+Açıklama: liblinear solver kullanıldığında, kesme noktası (intercept) ölçekleme faktörü.
+Değer: Pozitif bir float.
+Varsayılan: 1.
+
+9) dual=False
+Açıklama: Çift (dual) formda optimizasyon yapılıp yapılmayacağını belirler.
+Değer:
+
+    True: Çift form.
+    False: Primal form.
+
+Not: Sadece liblinear solver ile kullanılabilir.
+Varsayılan: False.
+
+10) n_jobs=None
+Açıklama: Çalıştırma için kullanılacak işlemci çekirdeği sayısı.
+Değerler:
+
+    None: Tek işlemci çekirdeği kullanır.
+    -1: Tüm kullanılabilir çekirdekler kullanılır.
+
+Varsayılan: None.
+
+11) multi_class='deprecated'
+Açıklama: Çok sınıflı sınıflandırma stratejisini belirler.
+Değerler:
+
+    'auto': Veri ve solver'a göre otomatik seçim.
+    'ovr': One-vs-Rest (Varsayılan liblinear için).
+    'multinomial': Çok sınıflı lojistik regresyon.
+
+Varsayılan: 'auto'.
+
+12) l1_ratio=None
+Açıklama: L1 ve L2 düzenlemeleri arasında bir ağırlık oranı (yalnızca elasticnet kullanıldığında geçerlidir).
+Değer:
+
+    float (0 ile 1 arasında).
+
+Varsayılan: None.
+
+
+
