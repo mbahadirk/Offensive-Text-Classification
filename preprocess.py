@@ -1,22 +1,13 @@
 import pandas as pd
 import re
 import zeyrek
-import difflib
 
 
 # Zeyrek analizörü oluştur
 analyzer = zeyrek.MorphAnalyzer()
 
-# Veri setini oku
-input_file = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv"  # Girdi dosyasının adı
-output_file = "turkce_42k_new.csv"  # Çıktı dosyasının adı
 stop_words_file = "turkce_stop_words.txt"  # Stop-words dosyasının adı
 
-# Veri setini yükle
-df = pd.read_csv(input_file)
-
-# Sadece ilk 1000 satırı al
-df = df.iloc[:50]
 
 # Stop-words listesini yükle
 with open(stop_words_file, "r", encoding="utf-8") as f:
@@ -140,9 +131,17 @@ def preprocess_text(df, analyzer, contextName = 'text'):
     df[contextName] = df[contextName].apply(full_cleaning_pipeline)
     return df
 
-df = preprocess_text(df, analyzer)
 
-# İşlenmiş veri setini kaydet
-# df.to_csv(output_file, index=False)
+if __name__ == '__main__':
+    # Veri setini oku
+    input_file = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv"  # Girdi dosyasının adı
+    output_file = "turkce_42k_new.csv"  # Çıktı dosyasının adı
+    # Veri setini yükle
+    df = pd.read_csv(input_file)
 
-# print(f"Veri seti işlenmiş ve '{output_file}' adlı dosyaya kaydedilmiştir.")
+    df = preprocess_text(df, analyzer)
+
+    # İşlenmiş veri setini kaydet
+    df.to_csv(output_file, index=False)
+
+    print(f"Veri seti işlenmiş ve '{output_file}' adlı dosyaya kaydedilmiştir.")
