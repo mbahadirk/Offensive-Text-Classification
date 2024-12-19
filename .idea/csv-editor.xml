@@ -10,6 +10,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\datasets\labeled_data.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\datasets\test_verileri\deneme_dataset_50k.csv">
           <value>
             <Attribute>
@@ -45,6 +52,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\datasets\turkish_dataset\test.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\datasets\turkish_dataset\train.csv">
           <value>
             <Attribute>
@@ -53,6 +67,13 @@
           </value>
         </entry>
         <entry key="\datasets\turkish_dataset\turkce_cumleler_kokler_corrected_50k.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\datasets\turkish_dataset\valid.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

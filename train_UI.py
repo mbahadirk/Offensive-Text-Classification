@@ -36,6 +36,10 @@ def create_hyperparameter_dropdowns():
     # Hyperparameter dropdownları için sözlüğü sıfırla
     hyperparam_dropdowns = {}
 
+    # Model ve Vectorizer seçili değilse hiperparametre çerçevesini oluşturma
+    if not model_name.get() or not vectorizer_name.get():
+        return
+
     selected_model = model_name.get()
     if selected_model and selected_model in hyperparameters:
         hyperparam_frame = tk.Frame(root)
@@ -59,6 +63,11 @@ def create_hyperparameter_dropdowns():
 
 
 def show_selections_and_call_classifier():
+    # Veri kontrolü
+    if not ("X" in globals() and "Y" in globals()):
+        result_label.config(text="Lütfen önce veriyi yükleyin.", fg="red")
+        return
+
     # Dropdown'dan alınan parametre değerlerini türlerine göre dönüştür
     params = {}
     for param, dropdown in hyperparam_dropdowns.items():
@@ -79,13 +88,9 @@ def show_selections_and_call_classifier():
         result_label.config(text="Lütfen hem model hem de vectorizer seçin.", fg="red")
         return
 
+    # Classifier çalıştırma
     try:
         result_label.config(text="Classifier çalıştırılıyor...", fg="green")
-        global X, Y, df
-        try:
-            X, Y, df = load_dataset(rows=int(rows))
-        except:
-            print("Veri sayısını seçin")
         classify(X, Y, model_name.get(), vectorizer_name.get(), save=True, **params)
         result_label.config(text="Classifier başarıyla çalıştı!", fg="green")
     except Exception as e:
@@ -147,7 +152,7 @@ label_model_info.pack(pady=10)
 label_vectorizer = tk.Label(root, text="Vectorizer Seç:")
 label_vectorizer.pack(pady=5)
 
-vectorizer_options = ["BOW", "TF"]
+vectorizer_options = ["BOW", "TFIDF"]
 vectorizer_name = tk.StringVar(value="BOW")  # Seçilen vectorizerin adı
 vectorizer_dropdown = ttk.Combobox(root, values=vectorizer_options, state="readonly")
 vectorizer_dropdown.pack(pady=5)

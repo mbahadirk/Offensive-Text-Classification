@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import messagebox, scrolledtext
+from tkinter import messagebox
 import pickle
 import preprocess
 import zeyrek

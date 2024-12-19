@@ -17,6 +17,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import pickle
 import os
+import seaborn as sns
 
 
 def load_dataset(path = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv", rows=2000):
@@ -42,7 +43,7 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False, **params):
         # vectorizer = CountVectorizer(max_features=500)   # Bag of Words için CountVectorizer kullanıyoruz
         X_train_vectorized = vectorizer.fit_transform(X_train)
         X_test_vectorized = vectorizer.transform(X_test)
-    elif (vectorizerType == "TF"):
+    elif (vectorizerType == "TFIDF"):
         # Vectorize the text data using TF-IDF
         vectorizer = TfidfVectorizer()
         X_train_vectorized = vectorizer.fit_transform(X_train)
@@ -58,30 +59,21 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False, **params):
     if (modelType == "SVM"):
         # Create and train the SVM model
         classifier = SVC(**params)
-        for k, v in params.items():
-            setattr(classifier, k, v)
     elif (modelType == "LogisticRegression"):
         # Logistic Regression modelini oluştur ve eğit
         classifier = LogisticRegression(**params)
-        for k, v in params.items():
-            setattr(classifier, k, v)
     elif (modelType == "MultinomialNB"):
         # MultinomialNB modeli
         classifier = MultinomialNB(**params)
-        for k, v in params.items():
-            setattr(classifier, k, v)
     elif (modelType == "DecisionTreeClassifier"):
         # Decision Tree modeli
         classifier = DecisionTreeClassifier(**params)
-        for k, v in params.items():
-            setattr(classifier, k, v)
     elif (modelType == "KNeighborsClassifier"):
         # K-Neighbors modeli
         classifier = KNeighborsClassifier(**params)
     elif (modelType == "RandomForestClassifier"):
         # Random Forest modeli
         classifier = RandomForestClassifier(**params)
-
     else:
         print("Yanlis model adi!")
         return
@@ -93,7 +85,7 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False, **params):
     print("\nModel Performansi:")
     print("Accuracy:", accuracy_score(y_test, y_pred))
     print(classification_report(y_test, y_pred))
-
+    visualize_classification_report(y_test, y_pred)
     save_path = f'models/{modelType}_{vectorizerType}'
     model_path = f'{save_path}_model_{train_length}.pkl'
     vectorizer_path = f'{save_path}_vectorizer_{train_length}.pkl'
@@ -109,6 +101,27 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False, **params):
     return y_test, y_pred, classifier
 
 
+def visualize_classification_report(y_test, y_pred):
+    # classification_report'un çıktısını al
+    report = classification_report(y_test, y_pred, output_dict=True)
+
+    # Precision, Recall ve F1-score metriklerini bir DataFrame'e aktar
+    report_df = pd.DataFrame(report).transpose()
+
+    # Sonuçları görselleştirme
+    metrics = ['precision', 'recall', 'f1-score']
+
+    # 3 farklı metrik için grafikleri oluştur
+    plt.figure(figsize=(12, 6))
+    for i, metric in enumerate(metrics):
+        plt.subplot(1, 3, i + 1)
+        sns.barplot(y=report_df.index, x=report_df[metric], palette="coolwarm" if metric == 'f1-score' else "muted")
+        plt.title(f'{metric.capitalize()} per class')
+        plt.ylabel('Class')
+        plt.xlabel(metric.capitalize())
+
+    plt.tight_layout()
+    plt.show()
 def create_matrix(y_test, y_pred, classifier):
     cm = confusion_matrix(y_test, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classifier.classes_)

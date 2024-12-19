@@ -1,4 +1,5 @@
-model_names = ['SVM', 'LogisticRegression', 'MultinomialNB', 'DecisionTreeClassifier', 'KNeighborsClassifier', 'RandomForestClassifier']
+model_names = ['SVM', 'LogisticRegression', 'MultinomialNB',
+               'DecisionTreeClassifier', 'KNeighborsClassifier', 'RandomForestClassifier']
 
 hyperparameters = {
     'SVM': {
