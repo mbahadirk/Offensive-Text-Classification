@@ -4,8 +4,7 @@ import pickle
 import preprocess
 import zeyrek
 from googleapiclient.discovery import build
-import os
-
+from get_models import getOptions
 # Zeyrek analizörü oluştur
 analyzer = zeyrek.MorphAnalyzer()
 
@@ -13,18 +12,6 @@ analyzer = zeyrek.MorphAnalyzer()
 API_KEY = "AIzaSyDnLcG-NAVZ0vpZo-N49yKy379FWW35bvA"
 
 
-def getOptions():
-    # models klasörünün yolu
-    models_folder = "models"
-    options = []
-    # models klasöründeki dosyaları listele
-    if os.path.exists(models_folder):
-        for file_name in os.listdir(models_folder):
-            if file_name.endswith("model.pkl"):
-                options.append(os.path.splitext(file_name)[0])
-    else:
-        print(f"{models_folder} klasörü bulunamadı.")
-    return options
 
 
 import re
