@@ -1,4 +1,4 @@
-import tkinter as tk
+import customtkinter as ctk
 from tkinter import messagebox, scrolledtext
 import pickle
 import preprocess
@@ -26,7 +26,23 @@ def getOptions():
         print(f"{models_folder} klasörü bulunamadı.")
     return options
 
-def fetch_comments(video_url):
+
+import re
+import html
+
+
+def clean_html_tags_and_time(text):
+    """HTML etiketlerini, saat-dakika formatındaki zaman ifadelerini ve HTML karakter referanslarını temizler."""
+    # HTML etiketlerini temizle
+    clean_text = re.sub(r'<.*?>', '', text)  # HTML etiketlerini kaldır
+    # Saat-dakika formatını temizle
+    clean_text = re.sub(r'\b\d{1,2}:\d{2}\b', '', clean_text)
+    # HTML karakter referanslarını çöz (&#39; -> ')
+    clean_text = html.unescape(clean_text)
+    return clean_text
+
+
+def fetch_comments(video_url, comment_size):
     try:
         # YouTube video ID'yi URL'den ayıklayın
         video_id = video_url.split("v=")[1]
@@ -40,7 +56,7 @@ def fetch_comments(video_url):
         comments = []
         next_page_token = None
 
-        while len(comments) < 20:  # En az 20 yorum almak için döngü
+        while len(comments) < comment_size:  # Yorum sayısına göre döngü
             request = youtube.commentThreads().list(
                 part="snippet",
                 videoId=video_id,
@@ -51,13 +67,17 @@ def fetch_comments(video_url):
 
             for item in response.get("items", []):
                 comment = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
-                comments.append(comment)
+                # HTML etiketlerini, saat-dakika ifadelerini ve HTML karakter referanslarını temizle
+                clean_comment = clean_html_tags_and_time(comment)
+                # Eğer yorum sadece boşluk veya saat/dakika içeriyorsa, bunu atla
+                if clean_comment.strip():  # Boş olmayan yorumları ekle
+                    comments.append(clean_comment)
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
                 break
 
-        return comments[:20]  # İlk 20 yorumu döndür
+        return comments[:comment_size]  # Belirtilen sayıda yorumu döndür
     except Exception as e:
         messagebox.showerror("Hata", f"Yorumları çekerken bir hata oluştu: {e}")
         return []
@@ -85,7 +105,8 @@ def classify_sentence():
     prediction = model.predict(vectorized_sentence)
 
     label = "Toxic" if prediction[0] == 1 else "Non-Toxic"
-    sentence_result_label.config(text=f"Tahmin: {label}")
+    sentence_result_label.configure(text=f"Tahmin: {label}")
+
 
 def classify_comments():
     video_url = url_entry.get()
@@ -94,14 +115,20 @@ def classify_comments():
         messagebox.showwarning("Uyarı", "YouTube video URL'si girmelisiniz!")
         return
 
+    try:
+        comment_size = int(comment_size_entry.get())  # Kullanıcının girdiği yorum sayısını al
+    except ValueError:
+        messagebox.showwarning("Uyarı", "Lütfen geçerli bir sayı girin!")
+        return
+
     # Yorumları getir
-    comments = fetch_comments(video_url)
+    comments = fetch_comments(video_url, comment_size)
 
     if not comments:
         return
 
     selected_option = dropdown_var.get()
-    
+
     # Model ve vektörleştiriciyi yükle
     with open(f'models/{selected_option}.pkl', 'rb') as model_file:
         model = pickle.load(model_file)
@@ -120,49 +147,67 @@ def classify_comments():
         results.append((comment, label))
 
     # Sonuçları göster
-    result_text = "".join([f"{i+1}. {comment}\nTahmin: {label}\n\n" for i, (comment, label) in enumerate(results)])
-    comment_result_textbox.delete(1.0, tk.END)
-    comment_result_textbox.insert(tk.END, result_text)
+    result_text = "".join([f"{i + 1}. {comment}\nTahmin: {label}\n\n" for i, (comment, label) in enumerate(results)])
+    comment_result_textbox.delete(1.0, ctk.END)
+    comment_result_textbox.insert(ctk.END, result_text)
+
 
 # GUI'yi oluştur
-root = tk.Tk()
+root = ctk.CTk()
 root.title("Toxicity Classifier")
+root.geometry("600x800")  # Pencere boyutunu ayarla
+root.configure(bg="#2E2E2E")  # Koyu gri arka plan
+
+# Font ayarlarını merkezi bir şekilde yapalım
+font_style = ("San-Francisco", 12)  # Yazı tipini burada ayarlıyoruz
 
 # Cümle girişi için etiket ve giriş kutusu
-sentence_label = tk.Label(root, text="Bir cümle girin:")
+sentence_label = ctk.CTkLabel(root, text="Bir cümle girin:", font=(font_style, 14), text_color="black")
 sentence_label.pack(pady=10)
 
-sentence_entry = tk.Entry(root, width=50)
+sentence_entry = ctk.CTkEntry(root, width=400, font=font_style)
 sentence_entry.pack(pady=10)
 
-sentence_classify_button = tk.Button(root, text="Cümleyi Sınıflandır", command=classify_sentence)
+sentence_classify_button = ctk.CTkButton(root, text="Cümleyi Sınıflandır", command=classify_sentence, font=font_style,
+                                         fg_color="#6A5ACD", text_color="white")
 sentence_classify_button.pack(pady=10)
 
-sentence_result_label = tk.Label(root, text="", font=("Helvetica", 12))
+sentence_result_label = ctk.CTkLabel(root, text="", font=(font_style, 14), text_color="black")
 sentence_result_label.pack(pady=10)
 
-# YouTube video URL girişi için etiket ve giriş kutusu
-url_label = tk.Label(root, text="YouTube video URL'sini girin:")
-url_label.pack(pady=10)
+# YouTube video URL ve Yorum Sayısı girişi için etiket ve giriş kutuları
+input_frame = ctk.CTkFrame(root)
+input_frame.pack(pady=10)
 
-url_entry = tk.Entry(root, width=50)
-url_entry.pack(pady=10)
+url_label = ctk.CTkLabel(input_frame, text="YouTube video URL'sini girin:", font=(font_style, 14), text_color="black")
+url_label.grid(row=0, column=0, padx=10, pady=10)
+
+url_entry = ctk.CTkEntry(input_frame, width=250, font=font_style)
+url_entry.grid(row=0, column=1, padx=10, pady=10)
+
+comment_size_label = ctk.CTkLabel(input_frame, text="Sayı:", font=(font_style, 14), text_color="black")
+comment_size_label.grid(row=0, column=2, padx=10, pady=10)
+
+comment_size_entry = ctk.CTkEntry(input_frame, width=40, font=font_style)
+comment_size_entry.grid(row=0, column=3, padx=10, pady=10)
+
+# Yorumları sınıflandırma butonu
+classify_comments_button = ctk.CTkButton(root, text="Yorumları Sınıflandır", command=classify_comments, font=font_style,
+                                         fg_color="#6A5ACD", text_color="white")
+classify_comments_button.pack(pady=10)
 
 # Dropdown menü için seçenekler
 options = getOptions()
 
-dropdown_var = tk.StringVar(root)
+dropdown_var = ctk.StringVar(root)
 dropdown_var.set(options[0])  # Varsayılan seçenek
 
-dropdown_menu = tk.OptionMenu(root, dropdown_var, *options)
+dropdown_menu = ctk.CTkOptionMenu(root, variable=dropdown_var, values=options)
 dropdown_menu.pack(pady=10)
 
-# Yorumları sınıflandırma butonu
-classify_comments_button = tk.Button(root, text="Yorumları Sınıflandır", command=classify_comments)
-classify_comments_button.pack(pady=10)
-
 # Sonuçları göstermek için kaydırılabilir metin alanı
-comment_result_textbox = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=60, height=20, font=("Helvetica", 10))
+comment_result_textbox = ctk.CTkTextbox(root, wrap=ctk.WORD, width=800, height=1000, font=(font_style, 10),
+                                        bg_color="#F0F8FF")
 comment_result_textbox.pack(pady=10)
 
 # Tkinter GUI'yi başlat
