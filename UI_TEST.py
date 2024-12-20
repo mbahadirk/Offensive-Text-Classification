@@ -138,7 +138,7 @@ def classify_comments():
     comment_result_textbox.delete(1.0, ctk.END)
     comment_result_textbox.insert(ctk.END, result_text)
 
-
+ctk.set_appearance_mode("light")  # Her zaman açık tema
 # GUI'yi oluştur
 root = ctk.CTk()
 root.title("Toxicity Classifier")
