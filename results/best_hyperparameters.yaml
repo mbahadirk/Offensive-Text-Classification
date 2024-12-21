@@ -1,0 +1,60 @@
+DT_BOW_model:
+  criterion: gini
+  max_depth: null
+  min_samples_leaf: 1
+  min_samples_split: 2
+DT_TF_model:
+  criterion: gini
+  max_depth: null
+  min_samples_leaf: 1
+  min_samples_split: 2
+KNN_BOW_model:
+  metric: minkowski
+  n_neighbors: 5
+  weights: uniform
+KNN_TF_model:
+  metric: minkowski
+  n_neighbors: 5
+  weights: uniform
+LR_BOW_model:
+  C: 1.0
+  l1_ratio: null
+  max_iter: 100
+  penalty: l2
+  solver: lbfgs
+LR_TF_model:
+  C: 1.0
+  l1_ratio: null
+  max_iter: 100
+  penalty: l2
+  solver: lbfgs
+MNB_BOW_model:
+  alpha: 1.0
+  fit_prior: true
+MNB_TF_model:
+  alpha: 1.0
+  fit_prior: true
+RF_BOW_model:
+  criterion: gini
+  max_depth: null
+  min_samples_leaf: 1
+  min_samples_split: 2
+  n_estimators: 100
+RF_TF_model:
+  criterion: gini
+  max_depth: null
+  min_samples_leaf: 1
+  min_samples_split: 2
+  n_estimators: 100
+SVM_BOW_model:
+  C: 1.0
+  degree: 3
+  gamma: scale
+  kernel: rbf
+  max_iter: -1
+SVM_TF_model:
+  C: 1.0
+  degree: 3
+  gamma: scale
+  kernel: rbf
+  max_iter: -1
