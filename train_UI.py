@@ -91,7 +91,7 @@ def show_selections_and_call_classifier():
     # Classifier çalıştırma
     try:
         result_label.config(text="Classifier çalıştırılıyor...", fg="green")
-        classify(X, Y, model_name.get(), vectorizer_name.get(), save=True, **params)
+        classify(X, Y, model_name.get(), vectorizer_name.get(), save=True,test_size=test_size,random_state=random_state, **params)
         result_label.config(text="Classifier başarıyla çalıştı!", fg="green")
     except Exception as e:
         result_label.config(text=f"Hata: {str(e)}", fg="red")
@@ -103,11 +103,32 @@ root.title("UI Oluşturma")
 root.geometry("600x800")
 
 # Alınacak veri sayısı
-label_data = tk.Label(root, text="Alınacak Veri Sayısı:")
-label_data.pack(pady=5)
+frame_data = tk.Frame(root)
+frame_data.pack(pady=5)
 
-data_entry = ttk.Entry(root)
-data_entry.pack(pady=5)
+label_data = tk.Label(frame_data, text="Alınacak Veri Sayısı:")
+label_data.pack(side=tk.TOP, padx=5)
+
+data_entry = ttk.Entry(frame_data)
+data_entry.pack(side=tk.TOP, padx=5)
+
+# İkinci giriş için frame
+frame_test_size = tk.Frame(root)
+frame_test_size.pack(pady=5)
+
+label_test_size = tk.Label(frame_test_size, text="Test Size")
+label_test_size.pack(side=tk.TOP, padx=3)
+
+test_size_entry = ttk.Entry(frame_test_size)
+test_size_entry.insert(0, 0.3)
+test_size_entry.pack(side=tk.TOP, padx=5)
+
+label_random_state = tk.Label(frame_test_size, text="Random State")
+label_random_state.pack(side=tk.TOP, padx=3)
+
+random_state_entry = ttk.Entry(frame_test_size)
+random_state_entry.insert(0, 42)
+random_state_entry.pack(side=tk.TOP, padx=5)
 
 
 def validate_input(P):
@@ -121,8 +142,12 @@ data_entry.config(validate="key", validatecommand=vcmd)
 
 
 def on_load_dataset():
-    global X, Y, df, rows
+    global X, Y, df, rows, test_size, random_state
     rows = data_entry.get()
+    test_size = test_size_entry.get()
+    random_state = random_state_entry.get()
+    print(test_size, random_state)
+
     if rows:
         X, Y, df = load_dataset(rows=int(rows))
         print('dataset yüklendi')
@@ -165,7 +190,7 @@ label_vectorizer_info.pack(pady=10)
 hyperparam_dropdowns = {}
 
 # Sonuçları gösteren buton ve etiket
-result_button = ttk.Button(root, text="Classifier Çalıştır", command=show_selections_and_call_classifier)
+result_button = ttk.Button(root, text="Modeli eğit", command=show_selections_and_call_classifier)
 result_button.pack(pady=10)
 
 result_label = tk.Label(root, text="", fg="blue", justify="left")
