@@ -57,22 +57,22 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False,test_size =
 
     # Initialize Model
     classifier = None
-    if (modelType == "SVM"):
+    if modelType == "SVM":
         # Create and train the SVM model
         classifier = SVC(**params)
-    elif (modelType == "LogisticRegression"):
+    elif modelType == "LogisticRegression":
         # Logistic Regression modelini oluştur ve eğit
         classifier = LogisticRegression(**params)
-    elif (modelType == "MultinomialNB"):
+    elif modelType == "MultinomialNB":
         # MultinomialNB modeli
         classifier = MultinomialNB(**params)
-    elif (modelType == "DecisionTreeClassifier"):
+    elif modelType == "DecisionTreeClassifier":
         # Decision Tree modeli
         classifier = DecisionTreeClassifier(**params)
-    elif (modelType == "KNeighborsClassifier"):
+    elif modelType == "KNeighborsClassifier":
         # K-Neighbors modeli
         classifier = KNeighborsClassifier(**params)
-    elif (modelType == "RandomForestClassifier"):
+    elif modelType == "RandomForestClassifier":
         # Random Forest modeli
         classifier = RandomForestClassifier(**params)
     else:
@@ -87,8 +87,8 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False,test_size =
     print("Accuracy:", accuracy_score(y_test, y_pred))
     print(classification_report(y_test, y_pred))
     save_path = f'models/{modelType}_{vectorizerType}'
-    model_path = f'{save_path}_model_{train_length}.pkl'
-    vectorizer_path = f'{save_path}_vectorizer_{train_length}.pkl'
+    model_path = f'{save_path}_{train_length}_model.pkl'
+    vectorizer_path = f'{save_path}_{train_length}_vectorizer.pkl'
     visualize_classification_report(y_test, y_pred, model_path)
 
     # Modeli kaydetme
@@ -134,7 +134,6 @@ def visualize_classification_report(y_test, y_pred, save_path):
 
     # Confusion matrix oluştur
     ax3 = fig.add_subplot(gs[2])
-    ax3.set_anchor('N')  # Center the subplot horizontally
     cm = confusion_matrix(y_test, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['non_toxic', 'toxic'],)
     disp.plot(cmap=plt.cm.Blues, ax=ax3)
