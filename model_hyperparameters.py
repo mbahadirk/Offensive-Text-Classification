@@ -12,7 +12,7 @@ hyperparameters = {
     'LogisticRegression': {
         'C': [1.0, 0.1, 10],
         'penalty': ['l2', 'l1', 'elasticnet', 'None'],
-        'l1_ratio': [None, 0.1, 0.5, 0.9],
+        'l1_ratio': [0.1, 0.5, 0.9],
         'solver': ['lbfgs', 'liblinear', 'saga', 'newton-cg'],
         'max_iter': [100, 200, 300, -1],
     },
@@ -34,7 +34,7 @@ hyperparameters = {
     'RandomForestClassifier': {
         'n_estimators': [50, 100, 150],
         'criterion': ['gini', 'entropy', 'log_loss'],
-        'max_depth': [None, 10, 50, 100],
+        'max_depth': [-1, 10, 50, 100],
         'min_samples_split': [2, 5, 10],
         'min_samples_leaf': [1, 5, 10],
     }

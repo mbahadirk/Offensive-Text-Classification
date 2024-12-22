@@ -134,8 +134,61 @@ def classify_comments():
         results.append((comment, label))
 
     # Sonuçları göster
+    result_text = "".join([f"{i + 1}. {comment}\nTahmin : {label}\n\n" for i, (comment, label) in enumerate(results)])
+    comment_result_textbox.delete(1.0, ctk.END)
+    comment_result_textbox.insert(ctk.END, result_text)
+
+
+def classify_comments_all_models():
+    video_url = url_entry.get()
+
+    if not video_url.strip():
+        messagebox.showwarning("Uyarı", "YouTube video URL'si girmelisiniz!")
+        return
+
+    try:
+        comment_size = int(comment_size_entry.get())  # Kullanıcının girdiği yorum sayısını al
+    except ValueError:
+        messagebox.showwarning("Uyarı", "Lütfen geçerli bir sayı girin!")
+        return
+
+    # Yorumları getir
+    comments = fetch_comments(video_url, comment_size)
+
+    if not comments:
+        return
+
+    all_models = getOptions()
+
+    # Tüm modelleri yükle
+    models = []
+    vectorizers = []
+    for option in all_models:
+        with open(f'models/{option}.pkl', 'rb') as model_file:
+            models.append(pickle.load(model_file))
+
+        with open(f'models/{option[:-6]}_vectorizer.pkl', 'rb') as vectorizer_file:
+            vectorizers.append(pickle.load(vectorizer_file))
+
+    results = []
+
+    for comment in comments:
+        predictions = []
+        for model, vectorizer in zip(models, vectorizers):
+            processed_comment = preprocess.full_cleaning_pipeline(comment)
+            vectorized_comment = vectorizer.transform([processed_comment])
+            prediction = model.predict(vectorized_comment)
+            predictions.append(prediction[0])
+
+
+        label = f' {f'{sum(predictions) / len(predictions)} Toxic 'if sum(predictions) >= len(predictions)/2 else f"{1-(sum(predictions) / len(predictions))} Non-Toxic"}'
+        color = "#FF0000" if sum(predictions) >= len(predictions)/2 else "#008000"
+        results.append((comment, label))
+
+    # Sonuçları göster
     result_text = "".join([f"{i + 1}. {comment}\nTahmin: {label}\n\n" for i, (comment, label) in enumerate(results)])
     comment_result_textbox.delete(1.0, ctk.END)
+    comment_result_textbox.tag_config("colored_text", foreground=color)
     comment_result_textbox.insert(ctk.END, result_text)
 
 
@@ -185,6 +238,10 @@ classify_comments_button = ctk.CTkButton(root, text="Yorumları Sınıflandır",
                                          fg_color="#6A5ACD", text_color="white")
 classify_comments_button.pack(pady=10)
 
+classify_comments_all_models_button = ctk.CTkButton(root, text="Yorumları Tüm Modellerle Sınıflandır", command=classify_comments_all_models, font=font_style,
+                                         fg_color="#6A5ACD", text_color="white")
+classify_comments_all_models_button.pack(pady=10)
+
 # Dropdown menü için seçenekler
 options = getOptions()
 
@@ -195,7 +252,7 @@ dropdown_menu = ctk.CTkOptionMenu(root, variable=dropdown_var, values=options)
 dropdown_menu.pack(pady=10)
 
 # Sonuçları göstermek için kaydırılabilir metin alanı
-comment_result_textbox = ctk.CTkTextbox(root, wrap=ctk.WORD, width=800, height=1000, font=(font_style, 10),
+comment_result_textbox = ctk.CTkTextbox(root, wrap=ctk.WORD, width=800, height=1000, font=(font_style, 20),
                                         bg_color="#F0F8FF")
 comment_result_textbox.pack(pady=10)
 
