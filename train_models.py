@@ -115,7 +115,7 @@ def visualize_classification_report(y_test, y_pred):
     plt.figure(figsize=(12, 6))
     for i, metric in enumerate(metrics):
         plt.subplot(1, 3, i + 1)
-        sns.barplot(y=report_df.index, x=report_df[metric], palette="coolwarm" if metric == 'f1-score' else "muted")
+        sns.barplot(y=report_df.index, x=report_df[metric], palette="coolwarm")
         plt.title(f'{metric.capitalize()} per class')
         plt.ylabel('Class')
         plt.xlabel(metric.capitalize())

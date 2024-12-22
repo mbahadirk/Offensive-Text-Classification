@@ -136,7 +136,7 @@ def preprocess_text(df, analyzer, contextName = 'text'):
 if __name__ == '__main__':
     # Veri setini oku
     input_file = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv"  # Girdi dosyasının adı
-    output_file = "turkce_42k_new.csv"  # Çıktı dosyasının adı
+    output_file = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv"  # Çıktı dosyasının adı
     # Veri setini yükle
     df = pd.read_csv(input_file)
 

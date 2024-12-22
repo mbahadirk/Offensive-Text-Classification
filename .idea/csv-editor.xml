@@ -59,6 +59,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\datasets\turkish_dataset\test_preprocessed.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\datasets\turkish_dataset\train.csv">
           <value>
             <Attribute>
