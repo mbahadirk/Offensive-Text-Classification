@@ -93,12 +93,13 @@ def replace_words(text):
         'türki': r'\btürkiye\b',
         'salağı': r'\bsalak\b',
         'kadı': r'\bkadın\b',
+        'amk': r'\baq\b',
     }
     
     # Regex ile eşleştirme yapılacak yapılar
     regex_patterns = {
         'lan': r'\bul?[a]*n?\b',  # "lan", "laan", "ula", "la", vb.
-        'amk': r'\bam[aqk]*\b'    # "amk", "amq", "aq", "am", vb.
+        'amk': r'\bam[aqk]*\b'    # "amk", "amq", "am","mk","mq", vb.
     }
     
     # Doğrudan eşleştirme düzeltmeleri
