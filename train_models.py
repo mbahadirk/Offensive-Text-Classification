@@ -1,11 +1,9 @@
 import pandas as pd
 import numpy as np
 from matplotlib.gridspec import GridSpec
-from tqdm import tqdm
-import copy
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer # Bag of Words için
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, ConfusionMatrixDisplay
@@ -15,13 +13,11 @@ from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
 import pickle
-import os
 import seaborn as sns
 
 
-def load_dataset(path = "datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv", rows=2000):
+def load_dataset(path="datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv", rows=2000):
     df = pd.read_csv(path)
     df = df.drop(columns=['id', 'text'])
     df = df.head(rows)

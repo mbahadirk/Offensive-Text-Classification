@@ -49,12 +49,12 @@ RF_TF_model:
 SVM_BOW_model:
   C: 1.0
   degree: 3
-  gamma: scale
+  gamma: 0.1
   kernel: rbf
   max_iter: -1
 SVM_TF_model:
   C: 1.0
   degree: 3
-  gamma: scale
+  gamma: 0.1
   kernel: rbf
   max_iter: -1
