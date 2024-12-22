@@ -5,17 +5,15 @@ import preprocess
 import zeyrek
 from googleapiclient.discovery import build
 from get_models import getOptions
+
+import re
+import html
+
 # Zeyrek analizörü oluştur
 analyzer = zeyrek.MorphAnalyzer()
 
 # YouTube API anahtarı
 API_KEY = "AIzaSyDnLcG-NAVZ0vpZo-N49yKy379FWW35bvA"
-
-
-
-
-import re
-import html
 
 
 def clean_html_tags_and_time(text):
@@ -123,20 +121,21 @@ def classify_comments():
     with open(f'models/{selected_option[:-6]}_vectorizer.pkl', 'rb') as vectorizer_file:
         vectorizer = pickle.load(vectorizer_file)
 
-    results = []
+    comment_result_textbox.delete(1.0, ctk.END)  # Eski sonuçları temizle
 
     for comment in comments:
         processed_comment = preprocess.full_cleaning_pipeline(comment)
         vectorized_comment = vectorizer.transform([processed_comment])
         prediction = model.predict(vectorized_comment)
 
+        # Tahmine göre renk belirle
         label = "Toxic" if prediction[0] == 1 else "Non-Toxic"
-        results.append((comment, label))
+        color = "#FF0000" if prediction[0] == 1 else "#008000"  # Toxic için kırmızı, Non-Toxic için yeşil
 
-    # Sonuçları göster
-    result_text = "".join([f"{i + 1}. {comment}\nTahmin : {label}\n\n" for i, (comment, label) in enumerate(results)])
-    comment_result_textbox.delete(1.0, ctk.END)
-    comment_result_textbox.insert(ctk.END, result_text)
+        # Sonucu renkli olarak ekle
+        comment_result_textbox.insert(ctk.END, f"Yorum : {comment}\n", (f"default",))
+        comment_result_textbox.insert(ctk.END, f"{label}\n\n", (f"{label}",))
+        comment_result_textbox.tag_config(f"{label}", foreground=color)
 
 
 def classify_comments_all_models():
@@ -180,16 +179,17 @@ def classify_comments_all_models():
             prediction = model.predict(vectorized_comment)
             predictions.append(prediction[0])
 
-
-        label = f' {f'{sum(predictions) / len(predictions)} Toxic 'if sum(predictions) >= len(predictions)/2 else f"{1-(sum(predictions) / len(predictions))} Non-Toxic"}'
-        color = "#FF0000" if sum(predictions) >= len(predictions)/2 else "#008000"
-        results.append((comment, label))
+        avg_prediction = sum(predictions) / len(predictions)
+        label = f' %{avg_prediction * 100:.0f} Toxic' if avg_prediction >= 0.5 else f' %{(1 - avg_prediction) * 100:.0f} Non-Toxic'
+        color = "#FF0000" if avg_prediction >= 0.5 else "#008000"  # Toxic için kırmızı, Non-Toxic için yeşil
+        results.append((comment, label, color))
 
     # Sonuçları göster
-    result_text = "".join([f"{i + 1}. {comment}\nTahmin: {label}\n\n" for i, (comment, label) in enumerate(results)])
     comment_result_textbox.delete(1.0, ctk.END)
-    comment_result_textbox.tag_config("colored_text", foreground=color)
-    comment_result_textbox.insert(ctk.END, result_text)
+    for i, (comment, label, color) in enumerate(results):
+        comment_result_textbox.insert(ctk.END, f"{i + 1}. {comment}\n", ("default",))
+        comment_result_textbox.insert(ctk.END, f"Tahmin: {label}\n\n", (label,))
+        comment_result_textbox.tag_config(label, foreground=color)
 
 
 ctk.set_appearance_mode("light")  # Her zaman açık tema
@@ -221,6 +221,15 @@ sentence_result_label.pack(pady=10)
 input_frame = ctk.CTkFrame(root)
 input_frame.pack(pady=10)
 
+# Dropdown menü için seçenekler
+options = getOptions()
+
+dropdown_var = ctk.StringVar(root)
+dropdown_var.set(options[0])  # Varsayılan seçenek
+
+dropdown_menu = ctk.CTkOptionMenu(root, variable=dropdown_var, values=options)
+dropdown_menu.pack(pady=10)
+
 url_label = ctk.CTkLabel(input_frame, text="YouTube video URL'sini girin:", font=(font_style, 14), text_color="black")
 url_label.grid(row=0, column=0, padx=10, pady=10)
 
@@ -233,6 +242,7 @@ comment_size_label.grid(row=0, column=2, padx=10, pady=10)
 comment_size_entry = ctk.CTkEntry(input_frame, width=40, font=font_style)
 comment_size_entry.grid(row=0, column=3, padx=10, pady=10)
 
+
 # Yorumları sınıflandırma butonu
 classify_comments_button = ctk.CTkButton(root, text="Yorumları Sınıflandır", command=classify_comments, font=font_style,
                                          fg_color="#6A5ACD", text_color="white")
@@ -242,14 +252,7 @@ classify_comments_all_models_button = ctk.CTkButton(root, text="Yorumları Tüm 
                                          fg_color="#6A5ACD", text_color="white")
 classify_comments_all_models_button.pack(pady=10)
 
-# Dropdown menü için seçenekler
-options = getOptions()
 
-dropdown_var = ctk.StringVar(root)
-dropdown_var.set(options[0])  # Varsayılan seçenek
-
-dropdown_menu = ctk.CTkOptionMenu(root, variable=dropdown_var, values=options)
-dropdown_menu.pack(pady=10)
 
 # Sonuçları göstermek için kaydırılabilir metin alanı
 comment_result_textbox = ctk.CTkTextbox(root, wrap=ctk.WORD, width=800, height=1000, font=(font_style, 20),

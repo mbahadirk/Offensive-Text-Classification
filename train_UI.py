@@ -99,7 +99,7 @@ def show_selections_and_call_classifier():
 
 # Ana pencere
 root = tk.Tk()
-root.title("UI Oluşturma")
+root.title("Model Eğitimi")
 root.geometry("600x800")
 
 # Alınacak veri sayısı
