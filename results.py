@@ -41,10 +41,11 @@ def write_best_parameters():
 
 
 
-def visualize_and_write_test_results(dataset_name):
-    x, y, df = load_dataset(path = f'datasets/turkish_dataset/{dataset_name}.csv', rows=-1)
+def visualize_and_write_test_results(dataset_name, test_size):
+    x, y, df = load_dataset(path=f'datasets/turkish_dataset/{dataset_name}.csv', rows=-1)
 
-    X_test, X_train, y_test, y_train = train_test_split(x, y, test_size=0.3, random_state=42)
+    # Doğru sıralama ile train-test split işlemi
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=42)
 
     # Handle missing values in X_test before transforming
     X_test = np.where(pd.isna(X_test), '', X_test)
@@ -55,15 +56,19 @@ def visualize_and_write_test_results(dataset_name):
         with open(f'models/{model.split('_model')[0]}_vectorizer.pkl', 'rb') as vectorizer_file:
             vectorizer = pickle.load(vectorizer_file)
 
-
+        # Vektörleştirme
         X_test_vectorized = vectorizer.transform(X_test)
 
+        # Tahmin yap
         y_pred = params.predict(X_test_vectorized)
 
+        # Accuracy'i yazdır
         print(model, accuracy_score(y_test, y_pred))
 
-        visualize_classification_report(y_test, y_pred, model)
+        # Görselleştir
+        visualize_classification_report(y_test, y_pred, model, model)
 
+        # Sonuçları YAML dosyasına yaz
         results = {model: classification_report(y_test, y_pred, output_dict=True)}
 
         with open(f'results/{dataset_name}.yaml', 'a+') as file:
@@ -71,8 +76,11 @@ def visualize_and_write_test_results(dataset_name):
 
 
 
+# if __name__ == '__main__':
+#     visualize_and_write_test_results('turkce_cumleler_kokler_corrected_50k',0.3)
 
-def plot_model_accuracies(results_file,dataset_name):
+
+def plot_model_accuracies(results_file, dataset_name):
     # Load the results from the YAML file
     with open(results_file, 'r') as file:
         results = yaml.load(file, Loader=yaml.FullLoader)
@@ -120,3 +128,6 @@ def plot_model_accuracies(results_file,dataset_name):
     plt.suptitle(f'Test Results on {dataset_name} Set')
     plt.tight_layout()
     plt.show()
+
+if __name__ == '__main__':
+    plot_model_accuracies('results/test_results.yaml', 'Test')

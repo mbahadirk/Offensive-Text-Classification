@@ -164,7 +164,7 @@ def classify_comments_all_models():
     vectorizers = []
     for option in all_models:
         with open(f'models/{option}.pkl', 'rb') as model_file:
-            models.append(pickle.load(model_file))
+            models.append((option, pickle.load(model_file)))
 
         with open(f'models/{option[:-6]}_vectorizer.pkl', 'rb') as vectorizer_file:
             vectorizers.append(pickle.load(vectorizer_file))
@@ -173,22 +173,28 @@ def classify_comments_all_models():
 
     for comment in comments:
         predictions = []
-        for model, vectorizer in zip(models, vectorizers):
+        for model_name, model in zip(models, vectorizers):
             processed_comment = preprocess.full_cleaning_pipeline(comment)
-            vectorized_comment = vectorizer.transform([processed_comment])
-            prediction = model.predict(vectorized_comment)
-            predictions.append(prediction[0])
+            vectorized_comment = model.transform([processed_comment])
+            prediction = model_name[1].predict(vectorized_comment)
+            predictions.append((model_name[0], prediction[0]))
 
-        avg_prediction = sum(predictions) / len(predictions)
+        toxic_models = [model_name for model_name, prediction in predictions if prediction == 1]
+        non_toxic_models = [model_name for model_name, prediction in predictions if prediction == 0]
+
+        avg_prediction = sum([prediction for _, prediction in predictions]) / len(predictions)
         label = f' %{avg_prediction * 100:.0f} Toxic' if avg_prediction >= 0.5 else f' %{(1 - avg_prediction) * 100:.0f} Non-Toxic'
         color = "#FF0000" if avg_prediction >= 0.5 else "#008000"  # Toxic için kırmızı, Non-Toxic için yeşil
-        results.append((comment, label, color))
+
+        results.append((comment, label, color, toxic_models, non_toxic_models))
 
     # Sonuçları göster
     comment_result_textbox.delete(1.0, ctk.END)
-    for i, (comment, label, color) in enumerate(results):
+    for i, (comment, label, color, toxic_models, non_toxic_models) in enumerate(results):
         comment_result_textbox.insert(ctk.END, f"{i + 1}. {comment}\n", ("default",))
-        comment_result_textbox.insert(ctk.END, f"Tahmin: {label}\n\n", (label,))
+        comment_result_textbox.insert(ctk.END, f"Tahmin: {label}\n", (label,))
+        comment_result_textbox.insert(ctk.END, f"Toksik veren modeller: {', '.join(toxic_models)}\n", (label,))
+        comment_result_textbox.insert(ctk.END, f"Toksik vermeyen modeller: {', '.join(non_toxic_models)}\n\n", (label,))
         comment_result_textbox.tag_config(label, foreground=color)
 
 

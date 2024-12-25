@@ -19,7 +19,10 @@ import seaborn as sns
 
 def load_dataset(path="datasets/turkish_dataset/turkce_cumleler_kokler_corrected_50k.csv", rows=2000):
     df = pd.read_csv(path)
-    df = df.drop(columns=['id', 'text'])
+    if 'id' in df.columns:
+        df = df.drop(columns=['id'])
+    if 'text' in df.columns:
+        df = df.drop(columns=['text'])
     df = df.head(rows)
     X = df['roots']
     y = df['label']
@@ -85,7 +88,7 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False,test_size =
     save_path = f'models/{modelType}_{vectorizerType}'
     model_path = f'{save_path}_{train_length}_model.pkl'
     vectorizer_path = f'{save_path}_{train_length}_vectorizer.pkl'
-    visualize_classification_report(y_test, y_pred, model_path)
+    visualize_classification_report(y_test, y_pred, model_path,model_name=f'{modelType} {vectorizerType}')
 
     # Modeli kaydetme
     if save:
@@ -98,7 +101,7 @@ def classify(X, y, modelType="SVM", vectorizerType="BOW", save=False,test_size =
     return y_test, y_pred, classifier
 
 
-def visualize_classification_report(y_test, y_pred, save_path):
+def visualize_classification_report(y_test, y_pred, save_path, model_name):
     # classification_report'un çıktısını al
     report = classification_report(y_test, y_pred, output_dict=True)
 
@@ -106,17 +109,17 @@ def visualize_classification_report(y_test, y_pred, save_path):
     report_df = pd.DataFrame(report).transpose()
     report_df.drop('accuracy', inplace=True)
 
-    fig = plt.figure(figsize=(8, 6))
-    gs = GridSpec(3, 1, height_ratios=[15, 2, 15])  # İlk grafik 3 kat büyük, ikinci grafik 1 kat küçük
+    fig = plt.figure(figsize=(10, 8))
+    gs = GridSpec(4, 1, height_ratios=[15, 2, 10, 1])  # Isı haritası, bar, confusion matrix için düzen
 
     # İlk subplot: Isı haritası
     ax1 = fig.add_subplot(gs[0])
     sns.heatmap(report_df.iloc[:, :-1], annot=True, fmt=".2f", cmap="YlGn", cbar=True, ax=ax1)
-    ax1.set_title("Classification Report Metrics Heatmap")
+    ax1.set_title(f"Train Report for {model_name}")
     ax1.set_xlabel("Metrics")
     ax1.set_ylabel("Classes")
-    ax1.xaxis.set_ticks_position('top')  # Move x-axis ticks to top
-    ax1.xaxis.set_label_position('top')  # Move x-axis labels to top
+    ax1.xaxis.set_ticks_position('top')  # X ekseni etiketlerini yukarı taşı
+    ax1.xaxis.set_label_position('top')  # X ekseni başlığını yukarı taşı
 
     # İkinci subplot: Accuracy Progress Bar
     ax2 = fig.add_subplot(gs[1])
@@ -126,19 +129,26 @@ def visualize_classification_report(y_test, y_pred, save_path):
     ax2.set_xlabel("Accuracy")
     ax2.text(accuracy / 2, 0, f"{accuracy:.2f}", fontsize=12, color="black", weight="bold", ha="center", va="center")
     ax2.set_yticks([])  # Y-ticks kaldırılır (sadece bar görünsün)
-    ax2.xaxis.set_label_position('top')  # Move x-axis labels to top
+    ax2.xaxis.set_label_position('top')  # X ekseni başlığını yukarı taşı
 
-    # Confusion matrix oluştur
+    # Üçüncü subplot: Confusion matrix
     ax3 = fig.add_subplot(gs[2])
     cm = confusion_matrix(y_test, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['non_toxic', 'toxic'],)
-    disp.plot(cmap=plt.cm.Blues, ax=ax3)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['non_toxic', 'toxic'])
+    disp.plot(cmap=plt.cm.Blues, ax=ax3, colorbar=False)  # Colorbar'ı kaldırdık
     ax3.set_title("Confusion Matrix")
+    ax3.set_xlabel("")
+    ax3.set_ylabel("")
 
+    # Confusion matrix'in altına toplam veri sayısını ekle
+    ax4 = fig.add_subplot(gs[3])
+    total_samples = len(y_test)
+    ax4.text(0.5, 0.5, f"Total Samples: {total_samples}", fontsize=12, ha="center", va="center")
+    ax4.axis("off")  # Bu subplot'un eksenlerini kapatıyoruz
 
     # Layout ayarı
-    plt.savefig(f'images/{save_path.strip('models/').strip('pkl')}png', bbox_inches='tight')
     plt.tight_layout()
+    plt.savefig(f'images/{save_path.strip("models/").strip("pkl")}', bbox_inches='tight')
     plt.show()
 
 

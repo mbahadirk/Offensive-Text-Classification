@@ -29,7 +29,7 @@ hyperparameters = {
     'KNeighborsClassifier': {
         'n_neighbors': [5, 3, 7, 9],
         'weights': ['uniform', 'distance'],
-        'metric': ['minkowski','euclidean', 'manhattan'],
+        'metric': ['minkowski','euclidean', 'manhattan','cosine'],
     },
     'RandomForestClassifier': {
         'n_estimators': [50, 100, 150],

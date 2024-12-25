@@ -127,7 +127,7 @@ label_random_state = tk.Label(frame_test_size, text="Random State")
 label_random_state.pack(side=tk.TOP, padx=3)
 
 random_state_entry = ttk.Entry(frame_test_size)
-random_state_entry.insert(0, 42)
+random_state_entry.insert(0,  42)
 random_state_entry.pack(side=tk.TOP, padx=5)
 
 
