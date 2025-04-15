@@ -1,5 +1,5 @@
 import pickle
-import preprocess
+from MLOPS import preprocess
 import zeyrek
 
 # Zeyrek analizörü oluştur

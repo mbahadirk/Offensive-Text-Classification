@@ -66,6 +66,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\output\preprocessed_train_40k.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>
