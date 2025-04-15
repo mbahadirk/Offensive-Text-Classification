@@ -8,6 +8,7 @@ from preprocess_derin_raw import full_cleaning_pipeline
 import re
 import html
 from googleapiclient.discovery import build
+import os
 
 # Cihaz (sabit CPU)
 device = torch.device("cpu")
@@ -28,7 +29,7 @@ except Exception as e:
     print(f"Tokenizer yüklenirken hata: {e}")
     exit()
 
-# Model sınıfı (bert2con.pt ile uyumlu)
+# Model sınıfı
 class BERTClassifier(nn.Module):
     def __init__(self, dropout=0.5):
         super(BERTClassifier, self).__init__()
@@ -46,76 +47,75 @@ class BERTClassifier(nn.Module):
 # HTML etiketlerini ve zaman formatlarını temizleme
 def clean_html_tags_and_time(text):
     """HTML etiketlerini, saat-dakika formatındaki zaman ifadeleri ve HTML karakter referanslarını temizler."""
-    # HTML etiketlerini temizle
     clean_text = re.sub(r'<.*?>', '', text)
-    # Saat-dakika formatını temizle
     clean_text = re.sub(r'\b\d{1,2}:\d{2}\b', '', clean_text)
-    # HTML karakter referanslarını çöz (&#39; -> ')
     clean_text = html.unescape(clean_text)
     return clean_text.strip()
 
 # YouTube yorumlarını çekme
 def fetch_comments(video_url, comment_size):
     try:
-        # YouTube video ID'yi URL'den ayıkla
         video_id = video_url.split("v=")[1]
         if "&" in video_id:
             video_id = video_id.split("&")[0]
-
-        # YouTube Data API servisini oluştur
         youtube = build("youtube", "v3", developerKey=API_KEY)
-
-        # Yorumları çek
         comments = []
         next_page_token = None
-
         while len(comments) < comment_size:
             request = youtube.commentThreads().list(
                 part="snippet",
                 videoId=video_id,
-                maxResults=100,  # API'den bir seferde max 100 yorum
+                maxResults=100,
                 pageToken=next_page_token
             )
             response = request.execute()
-
             for item in response.get("items", []):
                 comment = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
                 clean_comment = clean_html_tags_and_time(comment)
-                if clean_comment:  # Boş olmayan yorumları ekle
+                if clean_comment:
                     comments.append(clean_comment)
-
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
                 break
-
-        return comments[:comment_size]  # Belirtilen sayıda yorumu döndür
+        return comments[:comment_size]
     except Exception as e:
         messagebox.showerror("Hata", f"Yorumları çekerken hata: {e}")
         print(f"Yorum çekme hatası: {e}")
         return []
 
-# Modeli yükleme fonksiyonu
-def load_model():
+# Model dosyalarını listeleme
+def get_model_files():
+    model_dir = "models/DNN Models"
+    try:
+        files = os.listdir(model_dir)
+        return [f for f in files if f.endswith('.pt')]
+    except FileNotFoundError:
+        messagebox.showerror("Hata", f"Model klasörü bulunamadı: {model_dir}")
+        return []
+    except Exception as e:
+        messagebox.showerror("Hata", f"Model dosyaları alınırken hata: {e}")
+        return []
+
+# Model yükleme fonksiyonu
+def load_model(file_name):
     global model, selected_model_path
-    file_path = filedialog.askopenfilename(
-        title="Model Dosyası Seç",
-        filetypes=[("PyTorch Model Files", "*.pt")]
-    )
-    if file_path:
-        try:
-            model = BERTClassifier()
-            model.load_state_dict(torch.load(file_path, map_location=device))
-            model.to(device)
-            model.eval()
-            selected_model_path = file_path
-            model_label.config(text=f"Seçilen Model: {file_path.split('/')[-1]}")
-            print(f"Model yüklendi: {file_path}")
-        except Exception as e:
-            model = None
-            selected_model_path = None
-            model_label.config(text="Seçilen Model: Yok")
-            messagebox.showerror("Hata", f"Model yüklenirken hata: {e}")
-            print(f"Model yüklenirken hata: {e}")
+    if not file_name:
+        return
+    file_path = os.path.join("models/DNN Models", file_name)
+    try:
+        model = BERTClassifier()
+        model.load_state_dict(torch.load(file_path, map_location=device))
+        model.to(device)
+        model.eval()
+        selected_model_path = file_path
+        model_label.config(text=f"Seçilen Model: {file_name}")
+        print(f"Model yüklendi: {file_path}")
+    except Exception as e:
+        model = None
+        selected_model_path = None
+        model_label.config(text="Seçilen Model: Yok")
+        messagebox.showerror("Hata", f"Model yüklenirken hata: {e}")
+        print(f"Model yüklenirken hata: {e}")
 
 # Tek cümle sınıflandırma
 def classify_text():
@@ -123,24 +123,16 @@ def classify_text():
     if model is None:
         messagebox.showwarning("Uyarı", "Lütfen önce bir model seçin.")
         return
-
     raw_text = entry.get().strip()
-    threshold = threshold_var.get() / 100.0  # Kaydırıcıdan eşik değerini al
-
+    threshold = threshold_var.get() / 100.0
     if not raw_text:
         messagebox.showwarning("Uyarı", "Lütfen bir cümle girin.")
         return
-
     try:
-        # Metni ön işleme tabi tut
         cleaned = full_cleaning_pipeline(raw_text)
-        print(f"İşlenmiş metin: {cleaned}, Tip: {type(cleaned)}")  # Hata ayıklama
-
-        # cleaned'ın string olduğundan emin ol
+        print(f"İşlenmiş metin: {cleaned}, Tip: {type(cleaned)}")
         if not isinstance(cleaned, str):
             raise ValueError(f"full_cleaning_pipeline string döndürmeli, ama şu tip döndü: {type(cleaned)}")
-
-        # Tokenize et
         tokens = tokenizer(
             cleaned,
             return_tensors="pt",
@@ -150,33 +142,24 @@ def classify_text():
         )
         input_ids = tokens["input_ids"].to(device)
         attention_mask = tokens["attention_mask"].to(device)
-
-        # Tahmin yap
         with torch.no_grad():
             logits = model(input_ids, attention_mask)
-            probs = torch.softmax(logits, dim=1)  # Softmax ile olasılıklar
-            prob_toxic = probs[0, 1].item()  # Toksik sınıfın olasılığı
-            prob_non_toxic = probs[0, 0].item()  # Zararsız sınıfın olasılığı
+            probs = torch.softmax(logits, dim=1)
+            prob_toxic = probs[0, 1].item()
+            prob_non_toxic = probs[0, 0].item()
             prediction = 1 if prob_toxic >= threshold else 0
             label = "Toksik (1)" if prediction == 1 else "Zararsız (0)"
-
-        # Sonucu göster
         result_label.config(
             text=f"Tahmin: {label}\nToksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nİşlenmiş Metin: {cleaned}"
         )
-
-        # Olasılık çubuğunu güncelle
         progress_var.set(prob_toxic * 100)
         progress_label.config(text=f"Toksiklik Olasılığı: %{prob_toxic * 100:.1f}")
-
-        # Tahmini logla
         with open("predictions.log", "a", encoding="utf-8") as f:
             f.write(
                 f"Cümle: {raw_text}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
                 f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nEşik: {threshold:.2f}\n"
                 f"Model: {selected_model_path}\n\n"
             )
-
     except Exception as e:
         messagebox.showerror("Hata", f"Bir hata oluştu: {e}")
         print(f"Hata detayları: {e}")
@@ -187,12 +170,10 @@ def classify_comments():
     if model is None:
         messagebox.showwarning("Uyarı", "Lütfen önce bir model seçin.")
         return
-
     video_url = url_entry.get().strip()
     if not video_url:
         messagebox.showwarning("Uyarı", "Lütfen bir YouTube video URL'si girin.")
         return
-
     try:
         comment_size = int(comment_size_entry.get())
         if comment_size <= 0:
@@ -200,24 +181,16 @@ def classify_comments():
     except ValueError:
         messagebox.showwarning("Uyarı", "Lütfen geçerli bir yorum sayısı girin.")
         return
-
-    threshold = threshold_var.get() / 100.0  # Kaydırıcıdan eşik değerini al
-
-    # Yorumları çek
+    threshold = threshold_var.get() / 100.0
     comments = fetch_comments(video_url, comment_size)
     if not comments:
         return
-
-    # Sonuçları temizle
     comment_result_text.delete("1.0", tk.END)
-
-    # Yorumları sınıflandır
     for i, comment in enumerate(comments, 1):
         try:
             cleaned = full_cleaning_pipeline(comment)
             if not cleaned:
-                continue  # Boşsa atla
-
+                continue
             tokens = tokenizer(
                 cleaned,
                 return_tensors="pt",
@@ -227,7 +200,6 @@ def classify_comments():
             )
             input_ids = tokens["input_ids"].to(device)
             attention_mask = tokens["attention_mask"].to(device)
-
             with torch.no_grad():
                 logits = model(input_ids, attention_mask)
                 probs = torch.softmax(logits, dim=1)
@@ -235,28 +207,19 @@ def classify_comments():
                 prob_non_toxic = probs[0, 0].item()
                 prediction = 1 if prob_toxic >= threshold else 0
                 label = "Toksik" if prediction == 1 else "Zararsız"
-
-            # Renk belirle
             color = "red" if prediction == 1 else "green"
-
-            # Sonucu metin kutusuna ekle
             comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
             comment_result_text.insert(tk.END, f"İşlenmiş: {cleaned}\n")
             comment_result_text.insert(tk.END, f"Tahmin: {label}\n", f"tag_{label}")
             comment_result_text.insert(tk.END, f"Toksik Olasılık: {prob_toxic:.4f}\n")
             comment_result_text.insert(tk.END, f"Zararsız Olasılık: {prob_non_toxic:.4f}\n\n")
-
-            # Renk etiketini tanımla
             comment_result_text.tag_configure(f"tag_{label}", foreground=color)
-
-            # Tahmini logla
             with open("predictions.log", "a", encoding="utf-8") as f:
                 f.write(
                     f"YouTube Yorumu: {comment}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
                     f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\n"
                     f"Eşik: {threshold:.2f}\nModel: {selected_model_path}\nVideo URL: {video_url}\n\n"
                 )
-
         except Exception as e:
             comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
             comment_result_text.insert(tk.END, f"Hata: {e}\n\n")
@@ -267,7 +230,7 @@ def clear_text():
     entry.delete(0, tk.END)
     url_entry.delete(0, tk.END)
     comment_size_entry.delete(0, tk.END)
-    comment_size_entry.insert(0, "50")  # Varsayılan 50
+    comment_size_entry.insert(0, "50")
     result_label.config(text="")
     comment_result_text.delete("1.0", tk.END)
     progress_var.set(0)
@@ -277,7 +240,7 @@ def clear_text():
 # Tkinter arayüzü
 root = tk.Tk()
 root.title("Türkçe Toksiklik Sınıflayıcı")
-root.geometry("600x800")  # Yorumlar için daha büyük alan
+root.geometry("600x800")
 root.resizable(False, False)
 
 # Stil
@@ -292,9 +255,24 @@ frame.pack(fill=tk.BOTH, expand=True)
 # Model seçme
 model_frame = ttk.Frame(frame)
 model_frame.pack(fill=tk.X, pady=5)
-ttk.Button(model_frame, text="Model Seç", command=load_model).pack(side=tk.LEFT, padx=5)
+
+# Menubutton ve menü oluştur
+menu_button = ttk.Menubutton(model_frame, text="Model Seç")
+menu_button.pack(side=tk.LEFT, padx=5)
 model_label = ttk.Label(model_frame, text="Seçilen Model: Yok")
 model_label.pack(side=tk.LEFT, padx=5)
+
+# Menüyü oluştur
+model_menu = tk.Menu(menu_button, tearoff=0)
+menu_button["menu"] = model_menu
+
+# Model dosyalarını ekle
+model_files = get_model_files()
+if model_files:
+    for file_name in model_files:
+        model_menu.add_command(label=file_name, command=lambda f=file_name: load_model(f))
+else:
+    model_menu.add_command(label="Model Bulunamadı", state="disabled")
 
 # Cümle girişi
 ttk.Label(frame, text="Cümleyi girin:").pack(anchor="w")
@@ -311,11 +289,11 @@ url_entry.pack(pady=5, fill=tk.X)
 ttk.Label(url_frame, text="Yorum Sayısı:").pack(anchor="w")
 comment_size_entry = ttk.Entry(url_frame, width=10, font=("Arial", 12))
 comment_size_entry.pack(pady=5, anchor="w")
-comment_size_entry.insert(0, "50")  # Varsayılan 50 yorum
+comment_size_entry.insert(0, "50")
 
 # Eşik ayarı
 ttk.Label(frame, text="Toksiklik Eşiği (%):").pack(anchor="w")
-threshold_var = tk.DoubleVar(value=50.0)  # Varsayılan eşik: 0.5
+threshold_var = tk.DoubleVar(value=50.0)
 threshold_slider = ttk.Scale(frame, from_=0, to=100, orient=tk.HORIZONTAL, variable=threshold_var)
 threshold_slider.pack(pady=5, fill=tk.X)
 threshold_label = ttk.Label(frame, text=f"Eşik: %{threshold_var.get():.1f}")
