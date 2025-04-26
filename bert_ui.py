@@ -20,6 +20,7 @@ API_KEY = "AIzaSyDnLcG-NAVZ0vpZo-N49yKy379FWW35bvA"
 # Global değişkenler
 model = None  # Modeli global olarak tutacağız
 selected_model_path = None  # Seçilen model dosyasının yolu
+classified_comments = []  # Sınıflandırılmış yorumları saklamak için
 
 # Tokenizer'ı yükle
 try:
@@ -166,7 +167,7 @@ def classify_text():
 
 # YouTube yorumlarını sınıflandırma
 def classify_comments():
-    global model
+    global model, classified_comments
     if model is None:
         messagebox.showwarning("Uyarı", "Lütfen önce bir model seçin.")
         return
@@ -186,7 +187,8 @@ def classify_comments():
     if not comments:
         return
     comment_result_text.delete("1.0", tk.END)
-    for i, comment in enumerate(comments, 1):
+    classified_comments = []  # Önceki yorumları temizle
+    for i, comment in enumerate(comments[1:], 1):
         try:
             cleaned = full_cleaning_pipeline(comment)
             if not cleaned:
@@ -207,6 +209,16 @@ def classify_comments():
                 prob_non_toxic = probs[0, 0].item()
                 prediction = 1 if prob_toxic >= threshold else 0
                 label = "Toksik" if prediction == 1 else "Zararsız"
+            # Yorumları global listeye kaydet
+            classified_comments.append({
+                "index": i,
+                "original": comment,
+                "cleaned": cleaned,
+                "prob_toxic": prob_toxic,
+                "prob_non_toxic": prob_non_toxic,
+                "label": label,
+                "prediction": prediction
+            })
             color = "red" if prediction == 1 else "green"
             comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
             comment_result_text.insert(tk.END, f"İşlenmiş: {cleaned}\n")
@@ -224,6 +236,72 @@ def classify_comments():
             comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
             comment_result_text.insert(tk.END, f"Hata: {e}\n\n")
             print(f"Yorum sınıflandırma hatası: {e}")
+
+# Toksik yorumları eşik değerine göre listeleme
+def list_toxic_comments():
+    classify_comments()
+    global classified_comments
+    if not classified_comments:
+        messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
+        return
+    threshold = threshold_var.get() / 100.0
+    comment_result_text.delete("1.0", tk.END)
+    toxic_comments = [c for c in classified_comments if c["prob_toxic"] >= threshold and c["prediction"] == 1]
+    if not toxic_comments:
+        comment_result_text.insert(tk.END, f"Eşik %{threshold*100:.1f} üzerinde toksik yorum bulunamadı.\n")
+        return
+    for comment in toxic_comments:
+        comment_result_text.insert(tk.END, f"Yorum {comment['index']}: {comment['original']}\n")
+        comment_result_text.insert(tk.END, f"İşlenmiş: {comment['cleaned']}\n")
+        comment_result_text.insert(tk.END, f"Tahmin: {comment['label']}\n", f"tag_{comment['label']}")
+        comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
+        comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
+        comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="red")
+    with open("predictions.log", "a", encoding="utf-8") as f:
+        f.write(f"Toksik Yorumlar Listelendi (Eşik: %{threshold*100:.1f})\n")
+        for comment in toxic_comments:
+            f.write(
+                f"Yorum {comment['index']}: {comment['original']}\n"
+                f"İşlenmiş: {comment['cleaned']}\n"
+                f"Tahmin: {comment['label']}\n"
+                f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n"
+                f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
+            )
+        f.write("\n")
+# Zararsız yorumları eşik değerine göre listeleme
+def list_non_toxic_comments():
+    classify_comments()
+    global classified_comments
+    if not classified_comments:
+        messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
+        return
+    threshold = threshold_var.get() / 100.0
+    comment_result_text.delete("1.0", tk.END)
+    non_toxic_comments = [c for c in classified_comments if c["prob_non_toxic"] >= threshold and c["prediction"] == 0]
+    if not non_toxic_comments:
+        comment_result_text.insert(tk.END, f"Eşik %{threshold*100:.1f} üzerinde zararsız yorum bulunamadı.\n")
+        return
+    for comment in non_toxic_comments:
+        comment_result_text.insert(tk.END, f"Yorum {comment['index']}: {comment['original']}\n")
+        comment_result_text.insert(tk.END, f"İşlenmiş: {comment['cleaned']}\n")
+        comment_result_text.insert(tk.END, f"Tahmin: {comment['label']}\n", f"tag_{comment['label']}")
+        comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
+        comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
+        comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="green")
+    with open("predictions.log", "a", encoding="utf-8") as f:
+        f.write(f"Zararsız Yorumlar Listelendi (Eşik: %{threshold*100:.1f})\n")
+        for comment in non_toxic_comments:
+            f.write(
+                f"Yorum {comment['index']}: {comment['original']}\n"
+                f"İşlenmiş: {comment['cleaned']}\n"
+                f"Tahmin: {comment['label']}\n"
+                f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n"
+                f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
+            )
+        f.write("\n")   
+
+
+
 
 # Arayüzü temizleme fonksiyonu
 def clear_text():
@@ -305,6 +383,8 @@ button_frame = ttk.Frame(frame)
 button_frame.pack(pady=10)
 ttk.Button(button_frame, text="Cümleyi Sınıflandır", command=classify_text).pack(side=tk.LEFT, padx=5)
 ttk.Button(button_frame, text="Yorumları Sınıflandır", command=classify_comments).pack(side=tk.LEFT, padx=5)
+ttk.Button(button_frame, text="Toksik Yorumları Listele", command=list_toxic_comments).pack(side=tk.LEFT, padx=5)
+ttk.Button(button_frame, text="Toksik Olmayan Yorumları Listele", command=list_non_toxic_comments).pack(side=tk.LEFT, padx=5)
 ttk.Button(button_frame, text="Temizle", command=clear_text).pack(side=tk.LEFT, padx=5)
 
 # Sonuç etiketi (tek cümle için)
