@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, AutoModel
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
@@ -30,7 +30,7 @@ fasttext_vector_model = None
 
 # BERT Tokenizer
 try:
-    tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-turkish-uncased")
+    tokenizer = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
     print("BERT Tokenizer yüklendi.")
 except Exception as e:
     print(f"BERT Tokenizer yüklenirken hata: {e}")
@@ -66,7 +66,7 @@ class BertClassifier(torch.nn.Module):
   def __init__(self, dropout=0.5):
     super(BertClassifier, self).__init__()
 
-    self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+    self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
     self.dropout = torch.nn.Dropout(dropout)
     self.linear = torch.nn.Linear(768, 2)
     self.relu = torch.nn.ReLU()
@@ -83,7 +83,7 @@ class BertClassifier(torch.nn.Module):
 class BertLSTMClassifier(torch.nn.Module):
     def __init__(self, dropout=0.7):
         super(BertLSTMClassifier, self).__init__()
-        self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+        self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
         self.lstm = torch.nn.LSTM(input_size=768, hidden_size=256, batch_first=True, bidirectional=True)
         self.dropout = torch.nn.Dropout(dropout)
         self.linear = torch.nn.Linear(256 * 2, 2)  # 2 çünkü Bidirectional LSTM
@@ -97,6 +97,7 @@ class BertLSTMClassifier(torch.nn.Module):
         linear_output = self.linear(dropout_output)
         final_layer = self.relu(linear_output)
         return final_layer
+
 
 # FastText Model sınıfı
 class FastTextClassifier(nn.Module):
