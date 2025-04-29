@@ -2,15 +2,19 @@ import torch
 import torch.nn as nn
 from transformers import BertTokenizer, BertModel
 import tkinter as tk
-from tkinter import messagebox, ttk, filedialog
+from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from preprocess_derin_raw import full_cleaning_pipeline
 import re
 import html
 from googleapiclient.discovery import build
 import os
+import numpy as np
+from gensim.models import KeyedVectors
+import threading
+import time
 
-# Cihaz (sabit CPU)
+# Cihaz
 device = torch.device("cpu")
 print(f"Cihaz: {device}")
 
@@ -18,38 +22,100 @@ print(f"Cihaz: {device}")
 API_KEY = "AIzaSyDnLcG-NAVZ0vpZo-N49yKy379FWW35bvA"
 
 # Global değişkenler
-model = None  # Modeli global olarak tutacağız
-selected_model_path = None  # Seçilen model dosyasının yolu
-classified_comments = []  # Sınıflandırılmış yorumları saklamak için
+model = None
+selected_model_path = None
+selected_model_type = None
+classified_comments = []
+fasttext_vector_model = None
 
-# Tokenizer'ı yükle
+# BERT Tokenizer
 try:
     tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-turkish-uncased")
-    print("Tokenizer yüklendi.")
+    print("BERT Tokenizer yüklendi.")
 except Exception as e:
-    print(f"Tokenizer yüklenirken hata: {e}")
+    print(f"BERT Tokenizer yüklenirken hata: {e}")
     exit()
 
-# Model sınıfı
-class BERTClassifier(nn.Module):
-    def __init__(self, dropout=0.5):
-        super(BERTClassifier, self).__init__()
+# FastText vektör modelini arka planda yükle
+def load_fasttext_model():
+    global fasttext_vector_model
+    print("FastText vektör modeli yükleniyor...")
+    start_time = time.time()
+    try:
+        fasttext_vector_model = KeyedVectors.load_word2vec_format('cc.tr.300.vec.gz', binary=False)
+        print(f"FastText vektör modeli yüklendi. Süre: {time.time() - start_time:.2f} saniye")
+    except Exception as e:
+        print(f"FastText vektör modeli yüklenirken hata: {e}")
+        messagebox.showerror("Hata", f"FastText vektör modeli yüklenemedi: {e}")
+threading.Thread(target=load_fasttext_model, daemon=True).start()
+
+# Cümleyi vektöre çeviren fonksiyon (FastText için)
+def sentence_to_vec(sentence, model, dim=300):
+    sentence = str(sentence)
+    words = sentence.lower().split()
+    vecs = []
+    for word in words:
+        if word in model:
+            vecs.append(model[word])
+    if len(vecs) == 0:
+        return np.zeros(dim)
+    return np.mean(vecs, axis=0)
+
+# BERT Model sınıfı
+class BertClassifier(torch.nn.Module):
+  def __init__(self, dropout=0.5):
+    super(BertClassifier, self).__init__()
+
+    self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+    self.dropout = torch.nn.Dropout(dropout)
+    self.linear = torch.nn.Linear(768, 2)
+    self.relu = torch.nn.ReLU()
+
+  def forward(self, input_id, mask):
+    _, pooled_output = self.bert(input_ids=input_id, attention_mask=mask, return_dict=False)
+    dropout_output = self.dropout(pooled_output)
+    linear_output = self.linear(dropout_output)
+    final_layer = self.relu(linear_output)
+
+    return final_layer
+
+# BERT-LSTM Model sınıfı
+class BertLSTMClassifier(torch.nn.Module):
+    def __init__(self, dropout=0.7):
+        super(BertLSTMClassifier, self).__init__()
         self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
-        self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(self.bert.config.hidden_size, 2)  # 2 sınıf için
+        self.lstm = torch.nn.LSTM(input_size=768, hidden_size=256, batch_first=True, bidirectional=True)
+        self.dropout = torch.nn.Dropout(dropout)
+        self.linear = torch.nn.Linear(256 * 2, 2)  # 2 çünkü Bidirectional LSTM
+        self.relu = torch.nn.ReLU()
 
     def forward(self, input_ids, attention_mask):
-        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output
-        out = self.dropout(pooled_output)
-        out = self.linear(out)
-        return out  # Ham logits döndürüyor
+        last_hidden_state, _ = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=False)
+        lstm_output, _ = self.lstm(last_hidden_state)  # (batch_size, seq_len, 2*hidden_size)
+        cls_lstm_output = lstm_output[:, 0, :]  # İlk token'ın ([CLS]) çıktısı
+        dropout_output = self.dropout(cls_lstm_output)
+        linear_output = self.linear(dropout_output)
+        final_layer = self.relu(linear_output)
+        return final_layer
+
+# FastText Model sınıfı
+class FastTextClassifier(nn.Module):
+    def __init__(self, input_dim=300, hidden_dim=128, output_dim=2):
+        super(FastTextClassifier, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
 
 # HTML etiketlerini ve zaman formatlarını temizleme
 def clean_html_tags_and_time(text):
-    """HTML etiketlerini, saat-dakika formatındaki zaman ifadeleri ve HTML karakter referanslarını temizler."""
     clean_text = re.sub(r'<.*?>', '', text)
-    clean_text = re.sub(r'\b\d{1,2}:\d{2}\b', '', clean_text)
+    clean_text = re.sub(r'\b\d{1,2}:\d{2}\b', '', text)
     clean_text = html.unescape(clean_text)
     return clean_text.strip()
 
@@ -97,30 +163,118 @@ def get_model_files():
         messagebox.showerror("Hata", f"Model dosyaları alınırken hata: {e}")
         return []
 
-# Model yükleme fonksiyonu
+# Tkinter arayüzü
+root = tk.Tk()
+root.title("Türkçe Toksiklik Sınıflayıcı")
+root.geometry("600x800")
+root.resizable(False, False)
+
+# Stil
+style = ttk.Style()
+style.configure("TButton", font=("Arial", 12))
+style.configure("TLabel", font=("Arial", 12))
+
+# Çerçeve
+frame = ttk.Frame(root, padding="10")
+frame.pack(fill=tk.BOTH, expand=True)
+
+# Global değişkenler (frame tanımlandıktan sonra)
+model = None
+selected_model_path = None
+selected_model_type = tk.StringVar(value="bert")  # Varsayılan olarak "bert" seçili
+classified_comments = []
+fasttext_vector_model = None
+
+# Model ve sınıf seçimi için çerçeve
+model_frame = ttk.Frame(frame)
+model_frame.pack(fill=tk.X, pady=5)
+
 def load_model(file_name):
-    global model, selected_model_path
+    global model, selected_model_path, selected_model_type
     if not file_name:
         return
     file_path = os.path.join("models/DNN Models", file_name)
     try:
-        model = BERTClassifier()
-        model.load_state_dict(torch.load(file_path, map_location=device))
-        model.to(device)
+        # Seçilen sınıf türüne göre model nesnesini oluştur
+        model_type = selected_model_type.get()
+        if model_type == "bert":
+            model = BertClassifier(dropout=0.5)
+        elif model_type == "bert_lstm":
+            model = BertLSTMClassifier(dropout=0.7)
+        elif model_type == "fasttext":
+            model = FastTextClassifier(input_dim=300, hidden_dim=128, output_dim=2)
+        else:
+            raise ValueError(f"Geçersiz model türü: {model_type}")
+
+        # Modeli cihaza taşı
+        model = model.to(device)
+
+        # state_dict'i yükle
+        state_dict = torch.load(file_path, map_location=device, weights_only=True)
+        model.load_state_dict(state_dict)
+
+        # Modeli değerlendirme moduna al
         model.eval()
         selected_model_path = file_path
-        model_label.config(text=f"Seçilen Model: {file_name}")
-        print(f"Model yüklendi: {file_path}")
+        selected_label.config(text=f"Seçilen: {file_name} ({model_type})")
+        print(f"Model yüklendi: {file_path} ({model_type})")
     except Exception as e:
         model = None
         selected_model_path = None
-        model_label.config(text="Seçilen Model: Yok")
+        selected_label.config(text=f"Seçilen: Yok ({selected_model_type.get()})")
         messagebox.showerror("Hata", f"Model yüklenirken hata: {e}")
         print(f"Model yüklenirken hata: {e}")
 
+# Sınıf seçimi
+class_label = ttk.Label(model_frame, text="Sınıf Seç:")
+class_label.pack(side=tk.LEFT, padx=5)
+class_menu = ttk.Combobox(model_frame, textvariable=selected_model_type, state="readonly")
+class_menu['values'] = ("bert", "bert_lstm", "fasttext")
+class_menu.pack(side=tk.LEFT, padx=5)
+class_menu.current(0)  # Varsayılan olarak "bert" seçili
+
+# Model seçimi
+model_label = ttk.Label(model_frame, text="Model Dosyası Seç:")
+model_label.pack(side=tk.LEFT, padx=5)
+model_menu = ttk.Combobox(model_frame, state="readonly")
+model_menu.pack(side=tk.LEFT, padx=5)
+
+# Model dosyalarını yükle
+model_files = get_model_files()
+if model_files:
+    model_menu['values'] = model_files
+    model_menu.current(0)  # Varsayılan olarak ilk model dosyası seçili
+else:
+    model_menu['values'] = ["Model Bulunamadı"]
+    model_menu.current(0)
+    model_menu.config(state="disabled")
+
+# Seçilen model ve sınıfı göstermek için etiket
+selected_label = ttk.Label(model_frame, text="Seçilen: Yok (bert)")
+selected_label.pack(side=tk.LEFT, padx=5)
+
+# Model seçimi değiştiğinde çalışacak fonksiyon
+def on_model_select(event):
+    file_name = model_menu.get()
+    if file_name and file_name != "Model Bulunamadı":
+        load_model(file_name)
+        selected_label.config(text=f"Seçilen: {file_name} ({selected_model_type.get()})")
+
+# Sınıf seçimi değiştiğinde etiketi güncelle
+def on_class_select(*args):
+    file_name = model_menu.get()
+    if file_name and file_name != "Model Bulunamadı":
+        selected_label.config(text=f"Seçilen: {file_name} ({selected_model_type.get()})")
+    else:
+        selected_label.config(text=f"Seçilen: Yok ({selected_model_type.get()})")
+
+# Combobox değişikliklerini bağla
+model_menu.bind("<<ComboboxSelected>>", on_model_select)
+selected_model_type.trace("w", on_class_select)
+
 # Tek cümle sınıflandırma
 def classify_text():
-    global model
+    global model, selected_model_type
     if model is None:
         messagebox.showwarning("Uyarı", "Lütfen önce bir model seçin.")
         return
@@ -131,25 +285,34 @@ def classify_text():
         return
     try:
         cleaned = full_cleaning_pipeline(raw_text)
-        print(f"İşlenmiş metin: {cleaned}, Tip: {type(cleaned)}")
         if not isinstance(cleaned, str):
             raise ValueError(f"full_cleaning_pipeline string döndürmeli, ama şu tip döndü: {type(cleaned)}")
-        tokens = tokenizer(
-            cleaned,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=512
-        )
-        input_ids = tokens["input_ids"].to(device)
-        attention_mask = tokens["attention_mask"].to(device)
-        with torch.no_grad():
-            logits = model(input_ids, attention_mask)
-            probs = torch.softmax(logits, dim=1)
-            prob_toxic = probs[0, 1].item()
-            prob_non_toxic = probs[0, 0].item()
-            prediction = 1 if prob_toxic >= threshold else 0
-            label = "Toksik (1)" if prediction == 1 else "Zararsız (0)"
+        model_type = selected_model_type.get()
+        if model_type in ["bert", "bert_lstm"]:
+            tokens = tokenizer(
+                cleaned,
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                max_length=512
+            )
+            input_ids = tokens["input_ids"].to(device)
+            attention_mask = tokens["attention_mask"].to(device)
+            with torch.no_grad():
+                logits = model(input_ids, attention_mask)
+        elif model_type == "fasttext":
+            if fasttext_vector_model is None:
+                messagebox.showwarning("Uyarı", "FastText vektör modeli henüz yüklenmedi.")
+                return
+            text_vec = sentence_to_vec(cleaned, fasttext_vector_model)
+            text_vec = torch.tensor(text_vec, dtype=torch.float32).unsqueeze(0).to(device)
+            with torch.no_grad():
+                logits = model(text_vec)
+        probs = torch.softmax(logits, dim=1)
+        prob_toxic = probs[0, 1].item()
+        prob_non_toxic = probs[0, 0].item()
+        prediction = 1 if prob_toxic >= threshold else 0
+        label = "Toksik (1)" if prediction == 1 else "Zararsız (0)"
         result_label.config(
             text=f"Tahmin: {label}\nToksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nİşlenmiş Metin: {cleaned}"
         )
@@ -167,7 +330,7 @@ def classify_text():
 
 # YouTube yorumlarını sınıflandırma
 def classify_comments():
-    global model, classified_comments
+    global model, selected_model_type, classified_comments
     if model is None:
         messagebox.showwarning("Uyarı", "Lütfen önce bir model seçin.")
         return
@@ -187,29 +350,38 @@ def classify_comments():
     if not comments:
         return
     comment_result_text.delete("1.0", tk.END)
-    classified_comments = []  # Önceki yorumları temizle
-    for i, comment in enumerate(comments[1:], 1):
+    classified_comments = []
+    for i, comment in enumerate(comments, 1):
         try:
             cleaned = full_cleaning_pipeline(comment)
             if not cleaned:
                 continue
-            tokens = tokenizer(
-                cleaned,
-                return_tensors="pt",
-                padding="max_length",
-                truncation=True,
-                max_length=512
-            )
-            input_ids = tokens["input_ids"].to(device)
-            attention_mask = tokens["attention_mask"].to(device)
-            with torch.no_grad():
-                logits = model(input_ids, attention_mask)
-                probs = torch.softmax(logits, dim=1)
-                prob_toxic = probs[0, 1].item()
-                prob_non_toxic = probs[0, 0].item()
-                prediction = 1 if prob_toxic >= threshold else 0
-                label = "Toksik" if prediction == 1 else "Zararsız"
-            # Yorumları global listeye kaydet
+            model_type = selected_model_type.get()
+            if model_type in ["bert", "bert_lstm"]:
+                tokens = tokenizer(
+                    cleaned,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                    max_length=512
+                )
+                input_ids = tokens["input_ids"].to(device)
+                attention_mask = tokens["attention_mask"].to(device)
+                with torch.no_grad():
+                    logits = model(input_ids, attention_mask)
+            elif model_type == "fasttext":
+                if fasttext_vector_model is None:
+                    messagebox.showwarning("Uyarı", "FastText vektör modeli henüz yüklenmedi.")
+                    return
+                text_vec = sentence_to_vec(cleaned, fasttext_vector_model)
+                text_vec = torch.tensor(text_vec, dtype=torch.float32).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    logits = model(text_vec)
+            probs = torch.softmax(logits, dim=1)
+            prob_toxic = probs[0, 1].item()
+            prob_non_toxic = probs[0, 0].item()
+            prediction = 1 if prob_toxic >= threshold else 0
+            label = "Toksik" if prediction == 1 else "Zararsız"
             classified_comments.append({
                 "index": i,
                 "original": comment,
@@ -237,9 +409,8 @@ def classify_comments():
             comment_result_text.insert(tk.END, f"Hata: {e}\n\n")
             print(f"Yorum sınıflandırma hatası: {e}")
 
-# Toksik yorumları eşik değerine göre listeleme
+# Toksik yorumları listeleme
 def list_toxic_comments():
-    classify_comments()
     global classified_comments
     if not classified_comments:
         messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
@@ -268,9 +439,9 @@ def list_toxic_comments():
                 f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
             )
         f.write("\n")
-# Zararsız yorumları eşik değerine göre listeleme
+
+# Zararsız yorumları listeleme
 def list_non_toxic_comments():
-    classify_comments()
     global classified_comments
     if not classified_comments:
         messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
@@ -298,12 +469,9 @@ def list_non_toxic_comments():
                 f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n"
                 f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
             )
-        f.write("\n")   
+        f.write("\n")
 
-
-
-
-# Arayüzü temizleme fonksiyonu
+# Arayüzü temizleme
 def clear_text():
     entry.delete(0, tk.END)
     url_entry.delete(0, tk.END)
@@ -315,55 +483,17 @@ def clear_text():
     progress_label.config(text="Toksiklik Olasılığı: %0.0")
     threshold_var.set(50)
 
-# Tkinter arayüzü
-root = tk.Tk()
-root.title("Türkçe Toksiklik Sınıflayıcı")
-root.geometry("600x800")
-root.resizable(False, False)
-
-# Stil
-style = ttk.Style()
-style.configure("TButton", font=("Arial", 12))
-style.configure("TLabel", font=("Arial", 12))
-
-# Çerçeve
-frame = ttk.Frame(root, padding="10")
-frame.pack(fill=tk.BOTH, expand=True)
-
-# Model seçme
-model_frame = ttk.Frame(frame)
-model_frame.pack(fill=tk.X, pady=5)
-
-# Menubutton ve menü oluştur
-menu_button = ttk.Menubutton(model_frame, text="Model Seç")
-menu_button.pack(side=tk.LEFT, padx=5)
-model_label = ttk.Label(model_frame, text="Seçilen Model: Yok")
-model_label.pack(side=tk.LEFT, padx=5)
-
-# Menüyü oluştur
-model_menu = tk.Menu(menu_button, tearoff=0)
-menu_button["menu"] = model_menu
-
-# Model dosyalarını ekle
-model_files = get_model_files()
-if model_files:
-    for file_name in model_files:
-        model_menu.add_command(label=file_name, command=lambda f=file_name: load_model(f))
-else:
-    model_menu.add_command(label="Model Bulunamadı", state="disabled")
-
 # Cümle girişi
 ttk.Label(frame, text="Cümleyi girin:").pack(anchor="w")
 entry = ttk.Entry(frame, width=50, font=("Arial", 12))
 entry.pack(pady=5, fill=tk.X)
 
-# YouTube URL ve yorum sayısı girişi
+# YouTube URL ve yorum sayısı
 url_frame = ttk.Frame(frame)
 url_frame.pack(fill=tk.X, pady=5)
 ttk.Label(url_frame, text="YouTube Video URL:").pack(anchor="w")
 url_entry = ttk.Entry(url_frame, width=50, font=("Arial", 12))
 url_entry.pack(pady=5, fill=tk.X)
-
 ttk.Label(url_frame, text="Yorum Sayısı:").pack(anchor="w")
 comment_size_entry = ttk.Entry(url_frame, width=10, font=("Arial", 12))
 comment_size_entry.pack(pady=5, anchor="w")
@@ -398,7 +528,7 @@ progress.pack(pady=5)
 progress_label = ttk.Label(frame, text="Toksiklik Olasılığı: %0.0")
 progress_label.pack()
 
-# Yorum sonuçları için kaydırılabilir metin alanı
+# Yorum sonuçları
 comment_result_text = ScrolledText(frame, wrap=tk.WORD, width=60, height=15, font=("Arial", 10))
 comment_result_text.pack(pady=10, fill=tk.BOTH, expand=True)
 
