@@ -30,7 +30,7 @@ fasttext_vector_model = None
 
 # BERT Tokenizer
 try:
-    tokenizer = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
+    tokenizer = BertTokenizer.from_pretrained("models/embeddings/bert-turkish-tokenizer")
     print("BERT Tokenizer yüklendi.")
 except Exception as e:
     print(f"BERT Tokenizer yüklenirken hata: {e}")
