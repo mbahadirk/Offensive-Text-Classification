@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import BertTokenizer, BertModel, AutoModel
+from transformers import BertTokenizer, BertModel
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
@@ -9,15 +9,7 @@ import re
 import html
 from googleapiclient.discovery import build
 import os
-import numpy as np
-from gensim.models import KeyedVectors
-import threading
-import time
-import pickle
-
-# fasttext tokenizer'ı yükle
-with open("models/DNN Models/tokenizer.pkl", "rb") as f:
-    fasttext_tokenizer = pickle.load(f)
+import torch.serialization
 
 # Cihaz
 device = torch.device("cpu")
@@ -32,70 +24,32 @@ selected_model_path = None
 selected_model_type = None
 classified_comments = []
 
+# Sınıf etiketleri
+TOPICS = ["siyaset", "dunya", "ekonomi", "kultur", "saglik", "spor", "teknoloji"]
+
 # BERT Tokenizer
 try:
-    tokenizer = BertTokenizer.from_pretrained("models/embeddings/bert-turkish-tokenizer")
+    tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-turkish-uncased")
     print("BERT Tokenizer yüklendi.")
 except Exception as e:
     print(f"BERT Tokenizer yüklenirken hata: {e}")
     exit()
 
-
 # BERT Model sınıfı
-class BertClassifier(torch.nn.Module):
+class BertClassifier(nn.Module):
     def __init__(self, dropout=0.5):
         super(BertClassifier, self).__init__()
-
-        self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
-        self.dropout = torch.nn.Dropout(dropout)
-        self.linear = torch.nn.Linear(768, 2)
-        self.relu = torch.nn.ReLU()
+        self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+        self.dropout = nn.Dropout(dropout)
+        self.linear = nn.Linear(768, 7)  # 7 topic için
+        self.relu = nn.ReLU()
 
     def forward(self, input_id, mask):
         _, pooled_output = self.bert(input_ids=input_id, attention_mask=mask, return_dict=False)
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
         final_layer = self.relu(linear_output)
-
         return final_layer
-
-
-class BertLSTMClassifier(torch.nn.Module):
-    def __init__(self, dropout=0.7):
-        super(BertLSTMClassifier, self).__init__()
-        self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
-        self.lstm = torch.nn.LSTM(input_size=768, hidden_size=256, batch_first=True, bidirectional=True)
-        self.dropout = torch.nn.Dropout(dropout)
-        self.linear = torch.nn.Linear(256 * 2, 2)  # 2 çünkü Bidirectional LSTM
-        self.relu = torch.nn.ReLU()
-
-    def forward(self, input_ids, attention_mask):
-        last_hidden_state, _ = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=False)
-        lstm_output, _ = self.lstm(last_hidden_state)  # (batch_size, seq_len, 2*hidden_size)
-        cls_lstm_output = lstm_output[:, 0, :]  # İlk token'ın ([CLS]) çıktısı
-        dropout_output = self.dropout(cls_lstm_output)
-        linear_output = self.linear(dropout_output)
-        final_layer = self.relu(linear_output)
-        return final_layer
-
-
-class FastTextLSTMClassifier(nn.Module):
-    def __init__(self, embedding_matrix, hidden_dim=128, output_dim=2, num_layers=1):
-        super(FastTextLSTMClassifier, self).__init__()
-        num_embeddings, embedding_dim = embedding_matrix.shape
-        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
-        self.embedding.weight = nn.Parameter(torch.tensor(embedding_matrix, dtype=torch.float32))
-        self.embedding.weight.requires_grad = False  # FastText ağırlıkları sabit
-        self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_dim,
-                            num_layers=num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        embeds = self.embedding(x)  # (batch, max_len, embed_dim)
-        lstm_out, (h_n, c_n) = self.lstm(embeds)
-        out = self.fc(h_n[-1])
-        return out
-
 
 # HTML etiketlerini ve zaman formatlarını temizleme
 def clean_html_tags_and_time(text):
@@ -103,7 +57,6 @@ def clean_html_tags_and_time(text):
     clean_text = re.sub(r'\b\d{1,2}:\d{2}\b', '', text)
     clean_text = html.unescape(clean_text)
     return clean_text.strip()
-
 
 # YouTube yorumlarını çekme
 def fetch_comments(video_url, comment_size):
@@ -136,7 +89,6 @@ def fetch_comments(video_url, comment_size):
         print(f"Yorum çekme hatası: {e}")
         return []
 
-
 # Model dosyalarını listeleme
 def get_model_files():
     model_dir = "models/DNN Models"
@@ -150,10 +102,9 @@ def get_model_files():
         messagebox.showerror("Hata", f"Model dosyaları alınırken hata: {e}")
         return []
 
-
 # Tkinter arayüzü
 root = tk.Tk()
-root.title("Türkçe Toksiklik Sınıflayıcı")
+root.title("Türkçe Konu Sınıflayıcı")
 root.geometry("600x800")
 root.resizable(False, False)
 
@@ -169,13 +120,12 @@ frame.pack(fill=tk.BOTH, expand=True)
 # Global değişkenler (frame tanımlandıktan sonra)
 model = None
 selected_model_path = None
-selected_model_type = tk.StringVar(value="bert")  # Varsayılan olarak "bert" seçili
+selected_model_type = tk.StringVar(value="bert")
 classified_comments = []
 
 # Model ve sınıf seçimi için çerçeve
 model_frame = ttk.Frame(frame)
 model_frame.pack(fill=tk.X, pady=5)
-
 
 def load_model(file_name):
     global model, selected_model_path, selected_model_type
@@ -183,21 +133,34 @@ def load_model(file_name):
         return
     file_path = os.path.join("models/DNN Models", file_name)
     try:
+        # Allowlist custom and transformers model classes
+        from transformers.models.bert.modeling_bert import BertModel
+        torch.serialization.add_safe_globals([BertClassifier, BertModel])
+
         # Seçilen sınıf türüne göre model nesnesini oluştur
         model_type = selected_model_type.get()
         if model_type == "bert":
-            model = BertClassifier(dropout=0.5)
-        elif model_type == "bert_lstm":
-            model = BertLSTMClassifier(dropout=0.7)
+            # Önce weights_only=True ile state_dict yüklemeyi dene
+            try:
+                state_dict = torch.load(file_path, map_location=device, weights_only=True)
+                if isinstance(state_dict, dict):
+                    model = BertClassifier(dropout=0.5)
+                    model.load_state_dict(state_dict)
+                else:
+                    raise ValueError(f"Expected state_dict, got {type(state_dict)}")
+            except Exception as e:
+                # Eğer weights_only=True başarısız olursa, tam modeli yükle
+                print(f"weights_only=True başarısız, tam modeli yüklüyorum: {e}")
+                loaded_object = torch.load(file_path, map_location=device, weights_only=False)
+                if isinstance(loaded_object, BertClassifier):
+                    model = loaded_object
+                else:
+                    raise ValueError(f"Expected BertClassifier or state_dict, got {type(loaded_object)}")
         else:
             raise ValueError(f"Geçersiz model türü: {model_type}")
 
         # Modeli cihaza taşı
         model = model.to(device)
-
-        # state_dict'i yükle
-        state_dict = torch.load(file_path, map_location=device, weights_only=True)
-        model.load_state_dict(state_dict)
 
         # Modeli değerlendirme moduna al
         model.eval()
@@ -211,14 +174,13 @@ def load_model(file_name):
         messagebox.showerror("Hata", f"Model yüklenirken hata: {e}")
         print(f"Model yüklenirken hata: {e}")
 
-
 # Sınıf seçimi
 class_label = ttk.Label(model_frame, text="Sınıf Seç:")
 class_label.pack(side=tk.LEFT, padx=5)
 class_menu = ttk.Combobox(model_frame, textvariable=selected_model_type, state="readonly")
-class_menu['values'] = ("bert", "bert_lstm", "fasttext")
+class_menu['values'] = ("bert",)
 class_menu.pack(side=tk.LEFT, padx=5)
-class_menu.current(0)  # Varsayılan olarak "bert" seçili
+class_menu.current(0)
 
 # Model seçimi
 model_label = ttk.Label(model_frame, text="Model Dosyası Seç:")
@@ -230,7 +192,7 @@ model_menu.pack(side=tk.LEFT, padx=5)
 model_files = get_model_files()
 if model_files:
     model_menu['values'] = model_files
-    model_menu.current(0)  # Varsayılan olarak ilk model dosyası seçili
+    model_menu.current(0)
 else:
     model_menu['values'] = ["Model Bulunamadı"]
     model_menu.current(0)
@@ -240,14 +202,12 @@ else:
 selected_label = ttk.Label(model_frame, text="Seçilen: Yok (bert)")
 selected_label.pack(side=tk.LEFT, padx=5)
 
-
 # Model seçimi değiştiğinde çalışacak fonksiyon
 def on_model_select(event):
     file_name = model_menu.get()
     if file_name and file_name != "Model Bulunamadı":
         load_model(file_name)
         selected_label.config(text=f"Seçilen: {file_name} ({selected_model_type.get()})")
-
 
 # Sınıf seçimi değiştiğinde etiketi güncelle
 def on_class_select(*args):
@@ -257,11 +217,9 @@ def on_class_select(*args):
     else:
         selected_label.config(text=f"Seçilen: Yok ({selected_model_type.get()})")
 
-
 # Combobox değişikliklerini bağla
 model_menu.bind("<<ComboboxSelected>>", on_model_select)
 selected_model_type.trace("w", on_class_select)
-
 
 # Tek cümle sınıflandırma
 def classify_text():
@@ -279,7 +237,7 @@ def classify_text():
         if not isinstance(cleaned, str):
             raise ValueError(f"full_cleaning_pipeline string döndürmeli, ama şu tip döndü: {type(cleaned)}")
         model_type = selected_model_type.get()
-        if model_type in ["bert", "bert_lstm"]:
+        if model_type == "bert":
             tokens = tokenizer(
                 cleaned,
                 return_tensors="pt",
@@ -291,27 +249,31 @@ def classify_text():
             attention_mask = tokens["attention_mask"].to(device)
             with torch.no_grad():
                 logits = model(input_ids, attention_mask)
-
-        probs = torch.softmax(logits, dim=1)
-        prob_toxic = probs[0, 1].item()
-        prob_non_toxic = probs[0, 0].item()
-        prediction = 1 if prob_toxic >= threshold else 0
-        label = "Toksik (1)" if prediction == 1 else "Zararsız (0)"
-        result_label.config(
-            text=f"Tahmin: {label}\nToksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nİşlenmiş Metin: {cleaned}"
-        )
-        progress_var.set(prob_toxic * 100)
-        progress_label.config(text=f"Toksiklik Olasılığı: %{prob_toxic * 100:.1f}")
-        with open("predictions.log", "a", encoding="utf-8") as f:
-            f.write(
-                f"Cümle: {raw_text}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
-                f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nEşik: {threshold:.2f}\n"
-                f"Model: {selected_model_path}\n\n"
-            )
+            probs = torch.softmax(logits, dim=1)[0]
+            max_prob, predicted_idx = torch.max(probs, dim=0)
+            predicted_topic = TOPICS[predicted_idx.item()]
+            if max_prob.item() < threshold:
+                result_label.config(text=f"Tahmin: Güvenilir tahmin yok (Olasılık: {max_prob.item():.4f} < Eşik: {threshold:.2f})\nİşlenmiş Metin: {cleaned}")
+                progress_var.set(0)
+                progress_label.config(text="Konu Olasılığı: %0.0")
+            else:
+                prob_text = "\n".join([f"{topic}: {prob.item():.4f}" for topic, prob in zip(TOPICS, probs)])
+                result_label.config(
+                    text=f"Tahmin: {predicted_topic}\nOlasılık: {max_prob.item():.4f}\nTüm Olasılıklar:\n{prob_text}\nİşlenmiş Metin: {cleaned}"
+                )
+                progress_var.set(max_prob.item() * 100)
+                progress_label.config(text=f"Konu Olasılığı: %{max_prob.item() * 100:.1f}")
+            with open("predictions.log", "a", encoding="utf-8") as f:
+                f.write(
+                    f"Cümle: {raw_text}\nİşlenmiş: {cleaned}\nTahmin: {predicted_topic}\n"
+                    f"Olasılık: {max_prob.item():.4f}\nTüm Olasılıklar: {', '.join([f'{topic}: {prob.item():.4f}' for topic, prob in zip(TOPICS, probs)])}\n"
+                    f"Eşik: {threshold:.2f}\nModel: {selected_model_path}\n\n"
+                )
+        else:
+            raise ValueError(f"Geçersiz model türü: {model_type}")
     except Exception as e:
         messagebox.showerror("Hata", f"Bir hata oluştu: {e}")
         print(f"Hata detayları: {e}")
-
 
 # YouTube yorumlarını sınıflandırma
 def classify_comments():
@@ -342,7 +304,7 @@ def classify_comments():
             if not cleaned:
                 continue
             model_type = selected_model_type.get()
-            if model_type in ["bert", "bert_lstm"]:
+            if model_type == "bert":
                 tokens = tokenizer(
                     cleaned,
                     return_tensors="pt",
@@ -354,102 +316,75 @@ def classify_comments():
                 attention_mask = tokens["attention_mask"].to(device)
                 with torch.no_grad():
                     logits = model(input_ids, attention_mask)
-            probs = torch.softmax(logits, dim=1)
-            prob_toxic = probs[0, 1].item()
-            prob_non_toxic = probs[0, 0].item()
-            prediction = 1 if prob_toxic >= threshold else 0
-            label = "Toksik" if prediction == 1 else "Zararsız"
-            classified_comments.append({
-                "index": i,
-                "original": comment,
-                "cleaned": cleaned,
-                "prob_toxic": prob_toxic,
-                "prob_non_toxic": prob_non_toxic,
-                "label": label,
-                "prediction": prediction
-            })
-            color = "red" if prediction == 1 else "green"
-            comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
-            comment_result_text.insert(tk.END, f"İşlenmiş: {cleaned}\n")
-            comment_result_text.insert(tk.END, f"Tahmin: {label}\n", f"tag_{label}")
-            comment_result_text.insert(tk.END, f"Toksik Olasılık: {prob_toxic:.4f}\n")
-            comment_result_text.insert(tk.END, f"Zararsız Olasılık: {prob_non_toxic:.4f}\n\n")
-            comment_result_text.tag_configure(f"tag_{label}", foreground=color)
-            with open("predictions.log", "a", encoding="utf-8") as f:
-                f.write(
-                    f"YouTube Yorumu: {comment}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
-                    f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\n"
-                    f"Eşik: {threshold:.2f}\nModel: {selected_model_path}\nVideo URL: {video_url}\n\n"
-                )
+                probs = torch.softmax(logits, dim=1)[0]
+                max_prob, predicted_idx = torch.max(probs, dim=0)
+                predicted_topic = TOPICS[predicted_idx.item()]
+                if max_prob.item() < threshold:
+                    continue  # Eşik altında tahminleri atla
+                classified_comments.append({
+                    "index": i,
+                    "original": comment,
+                    "cleaned": cleaned,
+                    "probs": probs.tolist(),
+                    "predicted_topic": predicted_topic,
+                    "max_prob": max_prob.item()
+                })
+                prob_text = ", ".join([f"{topic}: {prob:.4f}" for topic, prob in zip(TOPICS, probs)])
+                comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
+                comment_result_text.insert(tk.END, f"İşlenmiş: {cleaned}\n")
+                comment_result_text.insert(tk.END, f"Tahmin: {predicted_topic}\n", f"tag_{predicted_topic}")
+                comment_result_text.insert(tk.END, f"Olasılık: {max_prob.item():.4f}\n")
+                comment_result_text.insert(tk.END, f"Tüm Olasılıklar: {prob_text}\n\n")
+                comment_result_text.tag_configure(f"tag_{predicted_topic}", foreground="blue")
+                with open("predictions.log", "a", encoding="utf-8") as f:
+                    f.write(
+                        f"YouTube Yorumu: {comment}\nİşlenmiş: {cleaned}\nTahmin: {predicted_topic}\n"
+                        f"Olasılık: {max_prob.item():.4f}\nTüm Olasılıklar: {prob_text}\n"
+                        f"Eşik: {threshold:.2f}\nModel: {selected_model_path}\nVideo URL: {video_url}\n\n"
+                    )
+            else:
+                raise ValueError(f"Geçersiz model türü: {model_type}")
         except Exception as e:
             comment_result_text.insert(tk.END, f"Yorum {i}: {comment}\n")
             comment_result_text.insert(tk.END, f"Hata: {e}\n\n")
             print(f"Yorum sınıflandırma hatası: {e}")
 
-
-# Toksik yorumları listeleme
-def list_toxic_comments():
+# Belirli bir konuya ait yorumları listeleme
+def list_topic_comments():
     global classified_comments
     if not classified_comments:
         messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
         return
-    threshold = threshold_var.get() / 100.0
-    comment_result_text.delete("1.0", tk.END)
-    toxic_comments = [c for c in classified_comments if c["prob_toxic"] >= threshold and c["prediction"] == 1]
-    if not toxic_comments:
-        comment_result_text.insert(tk.END, f"Eşik %{threshold * 100:.1f} üzerinde toksik yorum bulunamadı.\n")
-        return
-    for comment in toxic_comments:
-        comment_result_text.insert(tk.END, f"Yorum {comment['index']}: {comment['original']}\n")
-        comment_result_text.insert(tk.END, f"İşlenmiş: {comment['cleaned']}\n")
-        comment_result_text.insert(tk.END, f"Tahmin: {comment['label']}\n", f"tag_{comment['label']}")
-        comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
-        comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
-        comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="red")
-    with open("predictions.log", "a", encoding="utf-8") as f:
-        f.write(f"Toksik Yorumlar Listelendi (Eşik: %{threshold * 100:.1f})\n")
-        for comment in toxic_comments:
-            f.write(
-                f"Yorum {comment['index']}: {comment['original']}\n"
-                f"İşlenmiş: {comment['cleaned']}\n"
-                f"Tahmin: {comment['label']}\n"
-                f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n"
-                f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
-            )
-        f.write("\n")
-
-
-# Zararsız yorumları listeleme
-def list_non_toxic_comments():
-    global classified_comments
-    if not classified_comments:
-        messagebox.showwarning("Uyarı", "Önce yorumları sınıflandırın.")
+    selected_topic = topic_filter_var.get()
+    if not selected_topic:
+        messagebox.showwarning("Uyarı", "Lütfen bir konu seçin.")
         return
     threshold = threshold_var.get() / 100.0
     comment_result_text.delete("1.0", tk.END)
-    non_toxic_comments = [c for c in classified_comments if c["prob_non_toxic"] >= threshold and c["prediction"] == 0]
-    if not non_toxic_comments:
-        comment_result_text.insert(tk.END, f"Eşik %{threshold * 100:.1f} üzerinde zararsız yorum bulunamadı.\n")
+    topic_comments = [c for c in classified_comments if c["predicted_topic"] == selected_topic and c["max_prob"] >= threshold]
+    if not topic_comments:
+        comment_result_text.insert(tk.END, f"Konu '{selected_topic}' için eşik %{threshold*100:.1f} üzerinde yorum bulunamadı.\n")
         return
-    for comment in non_toxic_comments:
+    for comment in topic_comments:
+        prob_text = ", ".join([f"{topic}: {prob:.4f}" for topic, prob in zip(TOPICS, comment["probs"])])
         comment_result_text.insert(tk.END, f"Yorum {comment['index']}: {comment['original']}\n")
         comment_result_text.insert(tk.END, f"İşlenmiş: {comment['cleaned']}\n")
-        comment_result_text.insert(tk.END, f"Tahmin: {comment['label']}\n", f"tag_{comment['label']}")
-        comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
-        comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
-        comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="green")
+        comment_result_text.insert(tk.END, f"Tahmin: {comment['predicted_topic']}\n", f"tag_{comment['predicted_topic']}")
+        comment_result_text.insert(tk.END, f"Olasılık: {comment['max_prob']:.4f}\n")
+        comment_result_text.insert(tk.END, f"Tüm Olasılıklar: {prob_text}\n\n")
+        comment_result_text.tag_configure(f"tag_{comment['predicted_topic']}", foreground="blue")
     with open("predictions.log", "a", encoding="utf-8") as f:
-        f.write(f"Zararsız Yorumlar Listelendi (Eşik: %{threshold * 100:.1f})\n")
-        for comment in non_toxic_comments:
+        f.write(f"Konu '{selected_topic}' Yorumları Listelendi (Eşik: %{threshold*100:.1f})\n")
+        for comment in topic_comments:
+            prob_text = ", ".join([f"{topic}: {prob:.4f}" for topic, prob in zip(TOPICS, comment["probs"])])
             f.write(
                 f"Yorum {comment['index']}: {comment['original']}\n"
                 f"İşlenmiş: {comment['cleaned']}\n"
-                f"Tahmin: {comment['label']}\n"
-                f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n"
-                f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n"
+                f"Tahmin: {comment['predicted_topic']}\n"
+                f"Olasılık: {comment['max_prob']:.4f}\n"
+                f"Tüm Olasılıklar: {prob_text}\n\n"
             )
         f.write("\n")
-
 
 # Arayüzü temizleme
 def clear_text():
@@ -460,9 +395,9 @@ def clear_text():
     result_label.config(text="")
     comment_result_text.delete("1.0", tk.END)
     progress_var.set(0)
-    progress_label.config(text="Toksiklik Olasılığı: %0.0")
+    progress_label.config(text="Konu Olasılığı: %0.0")
     threshold_var.set(50)
-
+    topic_filter_var.set("")
 
 # Cümle girişi
 ttk.Label(frame, text="Cümleyi girin:").pack(anchor="w")
@@ -481,7 +416,7 @@ comment_size_entry.pack(pady=5, anchor="w")
 comment_size_entry.insert(0, "50")
 
 # Eşik ayarı
-ttk.Label(frame, text="Toksiklik Eşiği (%):").pack(anchor="w")
+ttk.Label(frame, text="Konu Tahmin Eşiği (%):").pack(anchor="w")
 threshold_var = tk.DoubleVar(value=50.0)
 threshold_slider = ttk.Scale(frame, from_=0, to=100, orient=tk.HORIZONTAL, variable=threshold_var)
 threshold_slider.pack(pady=5, fill=tk.X)
@@ -489,14 +424,19 @@ threshold_label = ttk.Label(frame, text=f"Eşik: %{threshold_var.get():.1f}")
 threshold_label.pack()
 threshold_var.trace("w", lambda *args: threshold_label.config(text=f"Eşik: %{threshold_var.get():.1f}"))
 
+# Konu filtresi
+ttk.Label(frame, text="Konu Filtresi:").pack(anchor="w")
+topic_filter_var = tk.StringVar()
+topic_filter_menu = ttk.Combobox(frame, textvariable=topic_filter_var, state="readonly")
+topic_filter_menu['values'] = TOPICS
+topic_filter_menu.pack(pady=5, fill=tk.X)
+
 # Butonlar
 button_frame = ttk.Frame(frame)
 button_frame.pack(pady=10)
 ttk.Button(button_frame, text="Cümleyi Sınıflandır", command=classify_text).pack(side=tk.LEFT, padx=5)
 ttk.Button(button_frame, text="Yorumları Sınıflandır", command=classify_comments).pack(side=tk.LEFT, padx=5)
-ttk.Button(button_frame, text="Toksik Yorumları Listele", command=list_toxic_comments).pack(side=tk.LEFT, padx=5)
-ttk.Button(button_frame, text="Toksik Olmayan Yorumları Listele", command=list_non_toxic_comments).pack(side=tk.LEFT,
-                                                                                                        padx=5)
+ttk.Button(button_frame, text="Seçilen Konu Yorumlarını Listele", command=list_topic_comments).pack(side=tk.LEFT, padx=5)
 ttk.Button(button_frame, text="Temizle", command=clear_text).pack(side=tk.LEFT, padx=5)
 
 # Sonuç etiketi (tek cümle için)
@@ -507,7 +447,7 @@ result_label.pack(pady=10)
 progress_var = tk.DoubleVar()
 progress = ttk.Progressbar(frame, variable=progress_var, maximum=100, length=500)
 progress.pack(pady=5)
-progress_label = ttk.Label(frame, text="Toksiklik Olasılığı: %0.0")
+progress_label = ttk.Label(frame, text="Konu Olasılığı: %0.0")
 progress_label.pack()
 
 # Yorum sonuçları
