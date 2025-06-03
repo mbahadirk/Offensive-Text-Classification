@@ -99,7 +99,7 @@ class ToxicityClassifierApp:
 
     def _bind_ui_elements(self):
         if self.model_manager:
-            self.ui.model_combo.bind("<<ComboboxSelected>>", self.on_model_select)
+            
             self.ui.class_combo.bind("<<ComboboxSelected>>", self.on_class_select)
             self.ui.selected_model_type.trace("w", self.on_class_select)
 
@@ -114,46 +114,28 @@ class ToxicityClassifierApp:
             self.ui.btn_list_non_toxic_tweets.config(command=self.list_non_toxic_tweets)
 
         self.ui.btn_clear_text.config(command=self.clear_all_data)
-        self.ui.btn_export_results.config(command=lambda: messagebox.showinfo("Bilgi", "Dışa Aktarma fonksiyonu henüz eklenmedi."))
 
         self.ui.threshold_var.trace("w", lambda *args: self.update_summary_labels())
 
     def _initial_load(self):
-        if self.model_manager:
-            model_files = self.model_manager.get_model_files()
-            self.ui.set_model_files(model_files)
-
-            if model_files and self.ui.model_combo['values'] != ["Model Bulunamadı"]:
-                self.root.after(100, lambda: self.model_manager.load_model(
-                    self.ui.model_combo.get(),
-                    self.ui.selected_model_type.get(),
-                    self.ui.update_selected_model_label
-                ))
-            else:
-                self.ui.update_selected_model_label("Yok", self.ui.selected_model_type.get())
-        else:
-            self.ui.set_model_files([])
-            self.ui.model_combo.config(state="disabled")
-            self.ui.update_selected_model_label("Yok", self.ui.selected_model_type.get())
-
-        self.ui.update_summary_labels(0, 0)
-
-    def on_model_select(self, event):
-        file_name = self.ui.model_combo.get()
-        if self.model_manager:
-            self.model_manager.load_model(file_name, self.ui.selected_model_type.get(), self.ui.update_selected_model_label)
-        else:
-            messagebox.showerror("Hata", "Model Yöneticisi mevcut değil.")
-
+     if self.model_manager:
+        selected_model_type = self.ui.selected_model_type.get()
+        self.model_manager.load_model(selected_model_type, self.ui.update_selected_model_label)
+     else:
+        self.ui.update_selected_model_label("Yok", self.ui.selected_model_type.get())
+     self.ui.update_summary_labels(0, 0)
+     
     def on_class_select(self, *args):
-        file_name = self.ui.model_combo.get()
-        if self.model_manager:
-            if file_name and file_name != "Model Bulunamadı":
-                self.model_manager.load_model(file_name, self.ui.selected_model_type.get(), self.ui.update_selected_model_label)
-            else:
-                 self.ui.update_selected_model_label("Yok", self.ui.selected_model_type.get())
-        else:
-            messagebox.showerror("Hata", "Model Yöneticisi mevcut değil.")
+     selected_model_type = self.ui.selected_model_type.get()
+     if self.model_manager:
+        self.model_manager.load_model(selected_model_type, self.ui.update_selected_model_label)
+     else:
+        messagebox.showerror("Hata", "Model Yöneticisi mevcut değil.")
+ 
+
+    
+
+
 
     def update_summary_labels(self):
         toxic_count_comments = sum(1 for c in self.classified_comments if c["prediction"] == 1)
@@ -194,7 +176,7 @@ class ToxicityClassifierApp:
                  return
 
             model_type = self.ui.selected_model_type.get()
-            if model_type in ["bert", "bert_lstm", "extended_bert_lstm"]: # extended_bert_lstm eklendi
+            if model_type in ["none","bert", "bert_lstm", "extended_bert_lstm"]: # extended_bert_lstm eklendi
                 tokens = tokenizer(
                     cleaned,
                     return_tensors="pt",

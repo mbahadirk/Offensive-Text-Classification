@@ -6,22 +6,34 @@ import torch.serialization
 from tkinter import messagebox
 
 # --- Model Sınıfları ---
-class BertClassifier(nn.Module):
-    def __init__(self, dropout=0.5):
-        super(BertClassifier, self).__init__()
-        try:
-            self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
-        except Exception as e:
-            print(f"BERT model yüklenirken hata: {e}")
-            raise e
-        self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(768, 2)
+class BertClassifier(torch.nn.Module):
+  def __init__(self, dropout=0.5):
+    super(BertClassifier, self).__init__()
 
-    def forward(self, input_id, mask):
-        _, pooled_output = self.bert(input_ids=input_id, attention_mask=mask, return_dict=False)
-        dropout_output = self.dropout(pooled_output)
-        linear_output = self.linear(dropout_output)
-        return linear_output
+    self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+    self.dropout = torch.nn.Dropout(dropout)
+
+    # Kullandığımız önceden eğilmiş model "base" sınıfına ait bir BERT modelidir. Yani;
+    # 12 layers of Transformer encoder, 12 attention heads, 768 hidden size, 110M parameters.
+    # 768, BERT-base modelindeki hidden size'yi, 2 ise veri setimizdek  i toplam kategori sayısını temsil ediyor.
+    self.linear = torch.nn.Linear(768, 2)
+    self.relu = torch.nn.ReLU()
+
+  def forward(self, input_id, mask):
+    # _ değişkeni dizideki tüm belirteçlerin gömme vektörlerini içerir.
+    # pooled_output değişkeni [CLS] belirtecinin gömme vektörünü içerir.
+    # Metin sınıflandırma için polled_output değişkenini girdi olarak kullanmak yeterlidir.
+
+    # Attention mask, bir belirtecin gercek bir kelimemi yoksa dolgu mu olduğunu tanımlar.
+    # Eğer gerçek bir kelime ise attention_mask=1, eğer dolgu ise attention_mask=0 olacaktır.
+    # return_dict, değeri "True ise" bir BERT modeli tahmin, eğitim veya değerlendirme sırasında ortaya çıkan
+    # loss, logits, hidden_states ve attentions dan oluşan bir tuple oluşturacaktır.
+    _, pooled_output = self.bert(input_ids=input_id, attention_mask=mask, return_dict=False)
+    dropout_output = self.dropout(pooled_output)
+    linear_output = self.linear(dropout_output)
+    final_layer = self.relu(linear_output)
+
+    return final_layer
 
 # BertLSTMClassifier sınıfını ExtendedBinarySentimentClassifier'dan önce tanımlayın
 class BertLSTMClassifier(torch.nn.Module):
@@ -49,6 +61,9 @@ class BertLSTMClassifier(torch.nn.Module):
         final_layer = self.relu(linear_output)
 
         return final_layer
+    
+
+    
 class ExtendedBinarySentimentClassifier(nn.Module):
     def __init__(self, feature_extractor_model: BertLSTMClassifier, freeze_pretrained=False):
         super(ExtendedBinarySentimentClassifier, self).__init__()
@@ -93,8 +108,7 @@ class ModelManager:
         self.tokenizer = self._load_tokenizer()
         self.TOKENIZER_AVAILABLE = (self.tokenizer is not None)
 
-        # add_safe_globals'ı ModelManager başlatılırken bir kez çağırın
-        # Bu, PyTorch'un bu sınıfları yükleme sırasında güvenli olarak tanımasını sağlar.
+        # PyTorch'un custom sınıfları güvenli şekilde yüklemesi için
         torch.serialization.add_safe_globals([BertClassifier, BertLSTMClassifier, BertModel, ExtendedBinarySentimentClassifier])
 
     def _load_tokenizer(self):
@@ -107,24 +121,16 @@ class ModelManager:
             messagebox.showerror("Hata", f"BERT Tokenizer yüklenemedi: {e}\nMetin sınıflandırma devre dışı.")
             return None
 
-    def get_model_files(self):
-        model_dir = "models/DNN Models"
-        try:
-            files = os.listdir(model_dir)
-            return [f for f in files if f.endswith('.pt')]
-        except FileNotFoundError:
-            print(f"Model klasörü bulunamadı: {model_dir}")
-            return []
-        except Exception as e:
-            print(f"Model dosyaları alınırken hata: {e}")
-            return []
+    def load_model(self, model_type, update_ui_callback=None):
+        model_mapping = {
+            "bert": "Bert_91AC_FINAL.pt",
+            "bert_lstm": "BertLSTM_91AC_FINAL.pt",
+            "extended_bert_lstm": "FINAL_SA_NO_FREEZE_5EP_93AC.pt"
+        }
 
-    def load_model(self, file_name, model_type, update_ui_callback=None):
-        if not file_name or file_name == "Model Bulunamadı":
-            self.model = None
-            self.selected_model_path = None
-            if update_ui_callback:
-                update_ui_callback("Yok", model_type)
+        file_name = model_mapping.get(model_type)
+        if not file_name:
+            messagebox.showerror("Hata", f"Geçersiz model türü: {model_type}")
             return
 
         file_path = os.path.join("models/DNN Models", file_name)
@@ -140,12 +146,10 @@ class ModelManager:
             if model_type == "bert":
                 self.model = BertClassifier(dropout=0.5)
             elif model_type == "bert_lstm":
-                self.model = BertLSTMClassifier(dropout=0.5) # BURAYI DA 0.5 OLARAK DÜZELTTİK
+                self.model = BertLSTMClassifier(dropout=0.5)
             elif model_type == "extended_bert_lstm":
-                base_bert_lstm_model = BertLSTMClassifier(dropout=0.5) # BURAYI DA 0.5 OLARAK DÜZELTTİK
+                base_bert_lstm_model = BertLSTMClassifier(dropout=0.5)
                 self.model = ExtendedBinarySentimentClassifier(feature_extractor_model=base_bert_lstm_model, freeze_pretrained=False)
-            else:
-                raise ValueError(f"Geçersiz model türü: {model_type}")
 
             self.model = self.model.to(self.device)
 
@@ -161,6 +165,7 @@ class ModelManager:
             if update_ui_callback:
                 update_ui_callback(file_name, model_type)
             print(f"Model yüklendi: {file_path} ({model_type})")
+
         except Exception as e:
             self.model = None
             self.selected_model_path = None
