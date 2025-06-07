@@ -123,9 +123,9 @@ class ModelManager:
 
     def load_model(self, model_type, update_ui_callback=None):
         model_mapping = {
-            "bert": "Bert_91AC_FINAL.pt",
-            "bert_lstm": "BertLSTM_91AC_FINAL.pt",
-            "extended_bert_lstm": "FINAL_SA_NO_FREEZE_5EP_93AC.pt"
+            "Bert": "Bert_91AC_FINAL.pt",
+            "BertLstm": "BertLSTM_91AC_FINAL.pt",
+            "ExtendedBertLstm": "FINAL_SA_NO_FREEZE_5EP_93AC.pt"
         }
 
         file_name = model_mapping.get(model_type)
@@ -143,11 +143,11 @@ class ModelManager:
             return
 
         try:
-            if model_type == "bert":
+            if model_type == "Bert":
                 self.model = BertClassifier(dropout=0.5)
-            elif model_type == "bert_lstm":
+            elif model_type == "BertLstm":
                 self.model = BertLSTMClassifier(dropout=0.5)
-            elif model_type == "extended_bert_lstm":
+            elif model_type == "ExtendedBertLstm":
                 base_bert_lstm_model = BertLSTMClassifier(dropout=0.5)
                 self.model = ExtendedBinarySentimentClassifier(feature_extractor_model=base_bert_lstm_model, freeze_pretrained=False)
 
