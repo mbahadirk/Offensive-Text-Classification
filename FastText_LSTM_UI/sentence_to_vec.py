@@ -1,6 +1,6 @@
 import numpy as np
 
-def sentence_to_vec(sentence, model, dim=300, max_len=20):
+def sentence_to_vec(sentence, model, dim=300, max_len=100):
     sentence = str(sentence)
     words = sentence.lower().split()
     vecs = []
