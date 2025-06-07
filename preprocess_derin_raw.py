@@ -154,11 +154,10 @@ def preprocess_text(df, contextName = 'text'):
 
 if __name__ == '__main__':
     # Veri setini oku
-    input_file = "datasets/turkish_dataset/train.csv"  # Girdi dosyasının adı
-    output_file = "output/preprocessed_train_40k.csv"  # Çıktı dosyasının adı
+    input_file = "datasets/sentimental_analysis/train.csv"  # Girdi dosyasının adı
+    output_file = "output/sentimental_analysis_pp_train.csv"  # Çıktı dosyasının adı
     # Veri setini yükle
     df = pd.read_csv(input_file)
-    df = df.drop("id",axis=1)
     df = preprocess_text(df)
 
     # İşlenmiş veri setini kaydet
