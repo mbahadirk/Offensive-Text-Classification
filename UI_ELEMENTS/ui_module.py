@@ -5,12 +5,12 @@ from tkinter.scrolledtext import ScrolledText
 class AppUI:
     def __init__(self, root, twitter_scraper_available=False):
         self.root = root
-        self.root.title("Türkçe Toksiklik Sınıflayıcı")
+        self.root.title("Offensive Text Classifier")
         self.root.geometry("900x700")
         self.root.configure(bg="#f9f9f9")
 
         # Initialize Tkinter variables that are directly tied to UI widgets
-        self.selected_model_type = tk.StringVar(value="bert")
+        self.selected_model_type = tk.StringVar(value="Bert")
         self.threshold_var = tk.DoubleVar(value=50.0)
 
         self._setup_styles()
@@ -91,7 +91,7 @@ class AppUI:
         # Manual Tab
         self.manual_tab = ttk.Frame(tab_parent)
         tab_parent.add(self.manual_tab, text="Manuel")
-        ttk.Label(self.manual_tab, text="Cümle giriniz:", style="White.TLabel").pack(anchor="w", padx=5, pady=5)
+        ttk.Label(self.manual_tab, text="Cümle giriniz:", style="White.TLabel").pack(anchor="center", padx=30, pady=30)
         self.manual_entry = tk.Entry(self.manual_tab, font=("Segoe UI", 10))
         self.manual_entry.pack(fill="x", padx=5)
         self.btn_classify_manual = ttk.Button(self.manual_tab, text="Analiz Et")
@@ -102,13 +102,13 @@ class AppUI:
         right_panel.pack(side="left", fill="both", expand=True, padx=10)
 
         ttk.Label(right_panel, text="Model Sınıfı Seç:", font=("Segoe UI", 11, "bold"), style="White.TLabel").pack(anchor="w", padx=5, pady=(5, 0))
-        self.class_combo = ttk.Combobox(right_panel, values=["bert", "bert_lstm","extended_bert_lstm"], state="readonly", textvariable=self.selected_model_type)
-        self.class_combo.set("bert")
+        self.class_combo = ttk.Combobox(right_panel, values=["Bert", "BertLstm","ExtendedBertLstm"], state="readonly", textvariable=self.selected_model_type)
+        self.class_combo.set("Bert")
         self.class_combo.pack(fill="x", padx=5, pady=5)
 
         
 
-        self.selected_label = ttk.Label(right_panel, text="Seçilen: Yok (bert)", style="White.TLabel")
+        self.selected_label = ttk.Label(right_panel, text="Seçilen: Yok (Bert)", style="White.TLabel")
         self.selected_label.pack(anchor="w", padx=5, pady=(0, 10))
 
         summary_frame = ttk.Labelframe(right_panel, text="Performans Özeti", style="White.TLabelframe")

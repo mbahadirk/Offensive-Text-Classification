@@ -176,7 +176,7 @@ class ToxicityClassifierApp:
                  return
 
             model_type = self.ui.selected_model_type.get()
-            if model_type in ["none","bert", "bert_lstm", "extended_bert_lstm"]: # extended_bert_lstm eklendi
+            if model_type in ["none","Bert", "BertLstm", "ExtendedBertLstm"]: # extended_bert_lstm eklendi
                 tokens = tokenizer(
                     cleaned,
                     return_tensors="pt",
@@ -278,7 +278,7 @@ class ToxicityClassifierApp:
                         continue
 
                     model_type = self.ui.selected_model_type.get()
-                    if model_type in ["bert", "bert_lstm", "extended_bert_lstm"]: # extended_bert_lstm eklendi
+                    if model_type in ["Bert", "BertLstm", "ExtendedBertLstm"]: # extended_bert_lstm eklendi
                         tokens = tokenizer(
                             cleaned,
                             return_tensors="pt",
@@ -382,7 +382,7 @@ class ToxicityClassifierApp:
 
                 model_type = self.ui.selected_model_type.get()
 
-                if model_type in ["bert", "bert_lstm", "extended_bert_lstm"]: # extended_bert_lstm eklendi
+                if model_type in ["Bert", "BertLstm", "ExtendedBertLstm"]: # extended_bert_lstm eklendi
                      tokens = tokenizer(
                          cleaned,
                          return_tensors="pt",
