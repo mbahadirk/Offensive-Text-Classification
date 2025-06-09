@@ -13,11 +13,6 @@ import numpy as np
 from gensim.models import KeyedVectors
 import threading
 import time
-import pickle
-
-# fasttext tokenizer'ı yükle
-with open("models/DNN Models/tokenizer.pkl", "rb") as f:
-    fasttext_tokenizer = pickle.load(f)
 
 # Cihaz
 device = torch.device("cpu")
@@ -34,7 +29,7 @@ classified_comments = []
 
 # BERT Tokenizer
 try:
-    tokenizer = BertTokenizer.from_pretrained("models/embeddings/bert-turkish-tokenizer")
+    tokenizer = BertTokenizer.from_pretrained("../models/embeddings/bert-turkish-tokenizer")
     print("BERT Tokenizer yüklendi.")
 except Exception as e:
     print(f"BERT Tokenizer yüklenirken hata: {e}")
@@ -46,7 +41,7 @@ class BertClassifier(torch.nn.Module):
     def __init__(self, dropout=0.5):
         super(BertClassifier, self).__init__()
 
-        self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
+        self.bert = AutoModel.from_pretrained("../models/embeddings/bert-turkish-model")
         self.dropout = torch.nn.Dropout(dropout)
         self.linear = torch.nn.Linear(768, 2)
         self.relu = torch.nn.ReLU()
@@ -63,7 +58,7 @@ class BertClassifier(torch.nn.Module):
 class BertLSTMClassifier(torch.nn.Module):
     def __init__(self, dropout=0.7):
         super(BertLSTMClassifier, self).__init__()
-        self.bert = AutoModel.from_pretrained("models/embeddings/bert-turkish-model")
+        self.bert = AutoModel.from_pretrained("../models/embeddings/bert-turkish-model")
         self.lstm = torch.nn.LSTM(input_size=768, hidden_size=256, batch_first=True, bidirectional=True)
         self.dropout = torch.nn.Dropout(dropout)
         self.linear = torch.nn.Linear(256 * 2, 2)  # 2 çünkü Bidirectional LSTM
@@ -139,7 +134,7 @@ def fetch_comments(video_url, comment_size):
 
 # Model dosyalarını listeleme
 def get_model_files():
-    model_dir = "models/DNN Models"
+    model_dir = "../models/DNN Models"
     try:
         files = os.listdir(model_dir)
         return [f for f in files if f.endswith('.pt')]
@@ -181,7 +176,7 @@ def load_model(file_name):
     global model, selected_model_path, selected_model_type
     if not file_name:
         return
-    file_path = os.path.join("models/DNN Models", file_name)
+    file_path = os.path.join("../models/DNN Models", file_name)
     try:
         # Seçilen sınıf türüne göre model nesnesini oluştur
         model_type = selected_model_type.get()
@@ -302,7 +297,7 @@ def classify_text():
         )
         progress_var.set(prob_toxic * 100)
         progress_label.config(text=f"Toksiklik Olasılığı: %{prob_toxic * 100:.1f}")
-        with open("predictions.log", "a", encoding="utf-8") as f:
+        with open("../predictions.log", "a", encoding="utf-8") as f:
             f.write(
                 f"Cümle: {raw_text}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
                 f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\nEşik: {threshold:.2f}\n"
@@ -375,7 +370,7 @@ def classify_comments():
             comment_result_text.insert(tk.END, f"Toksik Olasılık: {prob_toxic:.4f}\n")
             comment_result_text.insert(tk.END, f"Zararsız Olasılık: {prob_non_toxic:.4f}\n\n")
             comment_result_text.tag_configure(f"tag_{label}", foreground=color)
-            with open("predictions.log", "a", encoding="utf-8") as f:
+            with open("../predictions.log", "a", encoding="utf-8") as f:
                 f.write(
                     f"YouTube Yorumu: {comment}\nİşlenmiş: {cleaned}\nTahmin: {label}\n"
                     f"Toksik Olasılık: {prob_toxic:.4f}\nZararsız Olasılık: {prob_non_toxic:.4f}\n"
@@ -406,7 +401,7 @@ def list_toxic_comments():
         comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
         comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
         comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="red")
-    with open("predictions.log", "a", encoding="utf-8") as f:
+    with open("../predictions.log", "a", encoding="utf-8") as f:
         f.write(f"Toksik Yorumlar Listelendi (Eşik: %{threshold * 100:.1f})\n")
         for comment in toxic_comments:
             f.write(
@@ -438,7 +433,7 @@ def list_non_toxic_comments():
         comment_result_text.insert(tk.END, f"Toksik Olasılık: {comment['prob_toxic']:.4f}\n")
         comment_result_text.insert(tk.END, f"Zararsız Olasılık: {comment['prob_non_toxic']:.4f}\n\n")
         comment_result_text.tag_configure(f"tag_{comment['label']}", foreground="green")
-    with open("predictions.log", "a", encoding="utf-8") as f:
+    with open("../predictions.log", "a", encoding="utf-8") as f:
         f.write(f"Zararsız Yorumlar Listelendi (Eşik: %{threshold * 100:.1f})\n")
         for comment in non_toxic_comments:
             f.write(

@@ -113,7 +113,7 @@ class ModelManager:
 
     def _load_tokenizer(self):
         try:
-            tokenizer = BertTokenizer.from_pretrained("models/embeddings/bert-turkish-tokenizer")
+            tokenizer = BertTokenizer.from_pretrained("../models/embeddings/bert-turkish-tokenizer")
             print("BERT Tokenizer yüklendi.")
             return tokenizer
         except Exception as e:

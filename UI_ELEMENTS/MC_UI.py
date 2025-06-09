@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, AutoModel
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
@@ -29,7 +29,7 @@ TOPICS = ["siyaset", "dunya", "ekonomi", "kultur", "saglik", "spor", "teknoloji"
 
 # BERT Tokenizer
 try:
-    tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-turkish-uncased")
+    tokenizer = BertTokenizer.from_pretrained("../models/embeddings/bert-turkish-tokenizer")
     print("BERT Tokenizer yüklendi.")
 except Exception as e:
     print(f"BERT Tokenizer yüklenirken hata: {e}")
@@ -39,7 +39,7 @@ except Exception as e:
 class BertClassifier(nn.Module):
     def __init__(self, dropout=0.5):
         super(BertClassifier, self).__init__()
-        self.bert = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased")
+        self.bert = AutoModel.from_pretrained("../models/embeddings/bert-turkish-model")
         self.dropout = nn.Dropout(dropout)
         self.linear = nn.Linear(768, 7)  # 7 topic için
         self.relu = nn.ReLU()
@@ -91,7 +91,7 @@ def fetch_comments(video_url, comment_size):
 
 # Model dosyalarını listeleme
 def get_model_files():
-    model_dir = "models/DNN Models"
+    model_dir = "../models/MultiClass"
     try:
         files = os.listdir(model_dir)
         return [f for f in files if f.endswith('.pt')]
@@ -131,7 +131,7 @@ def load_model(file_name):
     global model, selected_model_path, selected_model_type
     if not file_name:
         return
-    file_path = os.path.join("models/DNN Models", file_name)
+    file_path = os.path.join("../models/MultiClass", file_name)
     try:
         # Allowlist custom and transformers model classes
         from transformers.models.bert.modeling_bert import BertModel
@@ -174,13 +174,7 @@ def load_model(file_name):
         messagebox.showerror("Hata", f"Model yüklenirken hata: {e}")
         print(f"Model yüklenirken hata: {e}")
 
-# Sınıf seçimi
-class_label = ttk.Label(model_frame, text="Sınıf Seç:")
-class_label.pack(side=tk.LEFT, padx=5)
-class_menu = ttk.Combobox(model_frame, textvariable=selected_model_type, state="readonly")
-class_menu['values'] = ("bert",)
-class_menu.pack(side=tk.LEFT, padx=5)
-class_menu.current(0)
+
 
 # Model seçimi
 model_label = ttk.Label(model_frame, text="Model Dosyası Seç:")
@@ -263,7 +257,7 @@ def classify_text():
                 )
                 progress_var.set(max_prob.item() * 100)
                 progress_label.config(text=f"Konu Olasılığı: %{max_prob.item() * 100:.1f}")
-            with open("predictions.log", "a", encoding="utf-8") as f:
+            with open("../predictions.log", "a", encoding="utf-8") as f:
                 f.write(
                     f"Cümle: {raw_text}\nİşlenmiş: {cleaned}\nTahmin: {predicted_topic}\n"
                     f"Olasılık: {max_prob.item():.4f}\nTüm Olasılıklar: {', '.join([f'{topic}: {prob.item():.4f}' for topic, prob in zip(TOPICS, probs)])}\n"
@@ -336,7 +330,7 @@ def classify_comments():
                 comment_result_text.insert(tk.END, f"Olasılık: {max_prob.item():.4f}\n")
                 comment_result_text.insert(tk.END, f"Tüm Olasılıklar: {prob_text}\n\n")
                 comment_result_text.tag_configure(f"tag_{predicted_topic}", foreground="blue")
-                with open("predictions.log", "a", encoding="utf-8") as f:
+                with open("../predictions.log", "a", encoding="utf-8") as f:
                     f.write(
                         f"YouTube Yorumu: {comment}\nİşlenmiş: {cleaned}\nTahmin: {predicted_topic}\n"
                         f"Olasılık: {max_prob.item():.4f}\nTüm Olasılıklar: {prob_text}\n"
@@ -373,7 +367,7 @@ def list_topic_comments():
         comment_result_text.insert(tk.END, f"Olasılık: {comment['max_prob']:.4f}\n")
         comment_result_text.insert(tk.END, f"Tüm Olasılıklar: {prob_text}\n\n")
         comment_result_text.tag_configure(f"tag_{comment['predicted_topic']}", foreground="blue")
-    with open("predictions.log", "a", encoding="utf-8") as f:
+    with open("../predictions.log", "a", encoding="utf-8") as f:
         f.write(f"Konu '{selected_topic}' Yorumları Listelendi (Eşik: %{threshold*100:.1f})\n")
         for comment in topic_comments:
             prob_text = ", ".join([f"{topic}: {prob:.4f}" for topic, prob in zip(TOPICS, comment["probs"])])
