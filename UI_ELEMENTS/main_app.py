@@ -80,7 +80,7 @@ class ToxicityClassifierApp:
         self.device = torch.device("cpu")
         print(f"Cihaz: {self.device}")
 
-        self.API_KEY = "AIzaSyDnLcG-NAVZ0vpZo-N49yKy379FWW35bvA"
+        self.API_KEY = "your api key"
 
         self.model_manager = ModelManager(self.device) if ModelManager else None
         if not self.model_manager:
